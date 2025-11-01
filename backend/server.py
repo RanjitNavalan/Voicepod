@@ -250,22 +250,19 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
     """Merge audio with background music using ffmpeg"""
-    # Use a simple ambient music (we'll create a sine wave for demo)
     output_path = audio_path.replace('.', '_final.')
     
-    # Simple merge with volume ducking
-    # Background music at -20dB, fade in/out
+    # For demo: Just normalize and convert to MP3 (without actual music)
+    # In production, you would mix with actual background music files
     cmd = [
         'ffmpeg', '-y',
         '-i', audio_path,
-        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',  # Silent track for music placeholder
-        '-filter_complex',
-        f'[0:a]volume=1.0[voice];[1:a]volume=0.1[music];[voice][music]amix=inputs=2:duration=first',
+        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # Loudness normalization
         '-c:a', 'libmp3lame', '-b:a', '192k',
         output_path
     ]
     
-    subprocess.run(cmd, check=True, capture_output=True)
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return output_path
 
 def add_metadata(audio_path: str, title: str) -> str:
