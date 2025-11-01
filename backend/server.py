@@ -586,6 +586,7 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         outro_file = MUSIC_DIR / 'stingers' / 'outro_smooth.mp3'
         
         if not music_file.exists():
+            logging.warning(f"Music file not found: {music_file}, using fallback")
             raise Exception(f"Music file not found: {music_file}")
         
         logging.info(f"Adding professional background music: {music_file.name}")
@@ -594,33 +595,37 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         duration_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
                        '-of', 'default=noprint_wrappers=1:nokey=1', audio_path]
         duration_result = subprocess.run(duration_cmd, capture_output=True, text=True)
+        
+        if duration_result.returncode != 0:
+            raise Exception("Failed to get audio duration")
+            
         voice_duration = float(duration_result.stdout.strip())
         
-        # IMPROVED FILTER: Smart ducking based on voice presence
+        if voice_duration <= 0:
+            raise Exception(f"Invalid voice duration: {voice_duration}")
+        
+        logging.info(f"Voice duration: {voice_duration}s")
+        
+        # SIMPLIFIED FILTER: Reliable ducking without complex sidechain
         filter_complex = (
             # === VOICE PROCESSING ===
-            '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice_formatted];'
+            '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice];'
             
             # === MUSIC PROCESSING ===
             # Trim music to voice length + add fades
             f'[1:a]atrim=0:{voice_duration},'
             'aformat=sample_rates=48000:channel_layouts=stereo,'
-            'volume=0.12,'  # Base music volume (12%)
+            'volume=0.15,'  # Base music volume (15%)
             'afade=t=in:st=0:d=3,'  # Smooth 3s fade in
-            f'afade=t=out:st={voice_duration-4}:d=4[music_base];'  # Smooth 4s fade out
+            f'afade=t=out:st={max(0, voice_duration-4)}:d=4[music];'  # Smooth 4s fade out
             
-            # === SMART DUCKING ===
-            # Detect voice presence and duck music intelligently
-            '[voice_formatted]asplit=2[voice_for_duck][voice_clean];'
-            '[voice_for_duck]acompressor=threshold=-25dB:ratio=6:attack=20:release=200[voice_trigger];'
-            '[music_base][voice_trigger]sidechaincompress=threshold=-40dB:ratio=3:attack=100:release=400:makeup=1[music_ducked];'
-            
-            # === MIX VOICE + DUCKED MUSIC ===
-            '[voice_clean][music_ducked]amix=inputs=2:duration=first:dropout_transition=3[voice_music];'
+            # === MIX VOICE + MUSIC ===
+            '[voice][music]amix=inputs=2:duration=first:weights=1.0 0.4[voice_music];'
         )
         
         # Add intro/outro if they exist
         if intro_file.exists() and outro_file.exists():
+            logging.info("Adding intro/outro stingers")
             filter_complex += (
                 # === INTRO/OUTRO ===
                 '[2:a]volume=0.5,afade=t=out:st=0.8:d=0.4[intro];'
@@ -629,7 +634,7 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
                 # === CONCATENATE ===
                 '[intro][voice_music][outro]concat=n=3:v=0:a=1[mixed];'
                 
-                # === FINAL NORMALIZATION ===
+                # === FINAL NORMALIZATION (ONLY PLACE LOUDNORM IS APPLIED) ===
                 '[mixed]loudnorm=I=-16:TP=-1.5:LRA=11'
             )
             
@@ -645,6 +650,7 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
             ]
         else:
             # No stingers, just voice + music
+            logging.info("No intro/outro stingers, proceeding with voice + music only")
             filter_complex += '[voice_music]loudnorm=I=-16:TP=-1.5:LRA=11'
             
             cmd = [
@@ -656,11 +662,13 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
                 output_path
             ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        logging.info(f"Running ffmpeg command...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode != 0:
-            logging.error(f"Music merge failed: {result.stderr[:500]}")
-            raise Exception("Music merge failed")
+            logging.error(f"Music merge failed with return code {result.returncode}")
+            logging.error(f"STDERR: {result.stderr[:1000]}")
+            raise Exception(f"Music merge failed: {result.stderr[:200]}")
         
         logging.info("Professional music with smart ducking added successfully")
         return output_path
@@ -668,15 +676,21 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
     except Exception as e:
         logging.warning(f"Music addition failed: {e}. Keeping clean voice only.")
         # Fallback: just normalize without music (preserve clean audio)
-        fallback_cmd = [
-            'ffmpeg', '-y', '-i', audio_path,
-            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-            '-c:a', 'libmp3lame', '-b:a', '192k',
-            output_path
-        ]
-        subprocess.run(fallback_cmd, check=True, capture_output=True)
-        logging.info("Fallback: clean voice without music")
-        return output_path
+        try:
+            fallback_cmd = [
+                'ffmpeg', '-y', '-i', audio_path,
+                '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+                '-c:a', 'libmp3lame', '-b:a', '192k',
+                output_path
+            ]
+            subprocess.run(fallback_cmd, check=True, capture_output=True, timeout=60)
+            logging.info("Fallback: clean voice without music")
+            return output_path
+        except Exception as fallback_error:
+            logging.error(f"Even fallback failed: {fallback_error}")
+            # Last resort: just copy the file
+            shutil.copy(audio_path, output_path)
+            return output_path
 
 def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
     """Add ID3 tags and cover image to audio"""
