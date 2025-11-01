@@ -55,7 +55,7 @@
   font-family: 'Space Grotesk', sans-serif;
   font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 700;
-  background: linear-gradient(135deg, #a78bfa 0%, #06b6d4 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #31A394 0%, #4DB8A8 50%, #31A394 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -65,59 +65,59 @@
 
 .hero-subtitle {
   font-size: clamp(1rem, 2vw, 1.25rem);
-  color: #cbd5e1;
+  color: #E6E6E6;
   font-weight: 400;
   margin-bottom: 2rem;
 }
 
 /* Glass Cards */
 .card-glass {
-  background: rgba(17, 17, 27, 0.7);
+  background: rgba(20, 20, 20, 0.8);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(49, 163, 148, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
   transition: all 0.3s ease;
 }
 
 .card-glass:hover {
-  border-color: rgba(139, 92, 246, 0.4);
-  box-shadow: 0 12px 48px rgba(139, 92, 246, 0.2);
+  border-color: rgba(49, 163, 148, 0.6);
+  box-shadow: 0 12px 48px rgba(49, 163, 148, 0.3);
   transform: translateY(-2px);
 }
 
 /* Preset Card */
 .preset-card {
   padding: 1.5rem;
-  background: rgba(139, 92, 246, 0.05);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: rgba(49, 163, 148, 0.08);
+  border: 1px solid rgba(49, 163, 148, 0.3);
   border-radius: 8px;
   transition: all 0.3s ease;
 }
 
 .preset-card:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(49, 163, 148, 0.15);
+  border-color: rgba(49, 163, 148, 0.5);
 }
 
 /* Upload Zone */
 .upload-zone {
-  border: 2px dashed rgba(139, 92, 246, 0.4);
+  border: 2px dashed rgba(49, 163, 148, 0.5);
   border-radius: 12px;
   padding: 3rem 2rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: rgba(139, 92, 246, 0.05);
+  background: rgba(49, 163, 148, 0.08);
 }
 
 .upload-zone:hover {
-  border-color: rgba(139, 92, 246, 0.6);
-  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(49, 163, 148, 0.7);
+  background: rgba(49, 163, 148, 0.15);
 }
 
 /* Process Button */
 .process-button {
-  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #31A394 0%, #2A8D7E 100%);
   font-weight: 600;
   font-size: 1.125rem;
   padding: 1.5rem;
@@ -127,7 +127,7 @@
 
 .process-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 12px 24px rgba(49, 163, 148, 0.5);
 }
 
 .process-button:disabled {
