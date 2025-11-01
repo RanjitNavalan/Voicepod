@@ -171,7 +171,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 1
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
@@ -179,6 +179,9 @@ backend:
       - working: false
         agent: "testing"
         comment: "❌ CRITICAL: LUFS normalization not achieving -16 target. Measured -18.06 LUFS (2.06 dB off target) and -inf LUFS in some cases. Multiple loudnorm filters may be conflicting or filler word removal creating too-short audio segments affecting normalization."
+      - working: false
+        agent: "main"
+        comment: "FIX APPLIED: Removed all loudnorm filters from initial audio cleanup stages (Demucs, Lightning AI, noisereduce fallbacks). Loudnorm is now applied ONLY ONCE at the final stage in merge_with_music function. This eliminates double/triple normalization that was causing -18.06 LUFS. Needs retesting."
   
   - task: "Background Music Integration with Ducking"
     implemented: true
