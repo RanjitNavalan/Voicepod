@@ -177,7 +177,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         torchaudio.save(vocals_wav, vocals.cpu(), model.samplerate)
         
         # Apply noise reduction on vocals for extra clarity
-        logging.info("Applying light noise reduction to vocals...")
+        logging.info("Applying moderate noise reduction to vocals...")
         try:
             import noisereduce as nr
             import librosa
@@ -185,14 +185,14 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             audio_data, sample_rate = librosa.load(vocals_wav, sr=None, mono=False)
             
-            # VERY LIGHT noise reduction (Demucs already did the work)
+            # Moderate noise reduction to handle recording background noise
             reduced_noise = nr.reduce_noise(
                 y=audio_data,
                 sr=sample_rate,
                 stationary=True,
-                prop_decrease=0.3,  # Only 30% reduction - very light
-                freq_mask_smooth_hz=300,
-                time_mask_smooth_ms=30
+                prop_decrease=0.6,  # 60% reduction for better noise removal
+                freq_mask_smooth_hz=500,
+                time_mask_smooth_ms=50
             )
             
             enhanced_wav = vocals_wav.replace('_vocals.wav', '_enhanced.wav')
