@@ -617,32 +617,25 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         
         logging.info(f"Voice duration: {voice_duration}s")
         
-        # Keep voice natural length, extend music to minimum 30 seconds
-        target_duration = max(30.0, voice_duration)  # Minimum 30 seconds for music
+        # Music matches voice length exactly - no artificial padding
+        # If voice is short, music will also be short (natural alignment)
         
         filter_complex = (
             # === VOICE PROCESSING ===
-            # Keep voice at its natural length, no padding
             '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice];'
             
             # === MUSIC PROCESSING ===
-            # Loop music to target duration (30+ seconds)
+            # Extend music to match or exceed voice duration
             f'[1:a]aloop=loop=-1:size=2e+09,'  # Loop music indefinitely
-            f'atrim=0:{target_duration},'  # Trim to target duration (30+ seconds)
+            f'atrim=0:{voice_duration + 5},'  # Music slightly longer than voice
             'aformat=sample_rates=48000:channel_layouts=stereo,'
             'volume=0.15,'  # Base music volume (15%)
             'afade=t=in:st=0:d=3,'  # Smooth 3s fade in
-            f'afade=t=out:st={max(0, target_duration-4)}:d=4[music];'  # Smooth 4s fade out
+            f'afade=t=out:st={max(0, voice_duration-1)}:d=5[music];'  # 5s fade out starting 1s before voice ends
             
             # === MIX VOICE + MUSIC ===
-            # Mix voice over music, voice determines length (shortest)
-            # This keeps natural voice length without padding
-            '[voice][music]amix=inputs=2:duration=shortest:weights=1.0 0.4[voice_music_short];'
-            
-            # === EXTEND WITH MUSIC TAIL ===
-            # If voice is shorter than target, add pure music at the end
-            f'[voice_music_short]apad=whole_dur={target_duration},'
-            f'[music]amix=inputs=2:duration=first:weights=0.0 1.0[voice_music];'
+            # Voice determines final length, music follows
+            '[voice][music]amix=inputs=2:duration=first:weights=1.0 0.4[voice_music];'
         )
         
         # Add intro/outro if they exist
