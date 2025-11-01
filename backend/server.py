@@ -438,34 +438,91 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
 
 def remove_filler_words(audio_path: str, filler_timestamps: List[tuple]) -> str:
     """Remove filler words from audio using timestamps"""
-    if not filler_timestamps:
+    if not filler_timestamps or len(filler_timestamps) == 0:
+        logging.info("No filler words detected, skipping removal")
         return audio_path
     
     output_path = audio_path.replace(Path(audio_path).suffix, '_no_fillers.mp3')
     
     try:
-        # Create ffmpeg filter to remove segments
-        # Build select filter to keep non-filler segments
-        filter_parts = []
+        logging.info(f"Removing {len(filler_timestamps)} filler word segments...")
         
-        # Sort timestamps
-        filler_timestamps.sort()
+        # Get total duration
+        duration_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                       '-of', 'default=noprint_wrappers=1:nokey=1', audio_path]
+        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True)
+        total_duration = float(duration_result.stdout.strip())
         
-        # If we have too many fillers, just return original
-        if len(filler_timestamps) > 10:
-            logging.warning("Too many filler words detected, skipping removal")
+        # Build keep segments (everything EXCEPT filler timestamps)
+        keep_segments = []
+        current_time = 0.0
+        
+        for start, end in sorted(filler_timestamps):
+            # Add segment before filler
+            if current_time < start:
+                keep_segments.append((current_time, start))
+            current_time = end
+        
+        # Add final segment after last filler
+        if current_time < total_duration:
+            keep_segments.append((current_time, total_duration))
+        
+        # If no segments to keep, return original
+        if not keep_segments:
+            logging.warning("No segments to keep after filler removal, returning original")
             return audio_path
         
-        # For simplicity, use atempo filter to speed through filler sections slightly
-        # Full implementation would use complex filter to cut segments
-        # For now, just copy the file
-        shutil.copy(audio_path, output_path)
-        logging.info(f"Detected {len(filler_timestamps)} filler words (removal not fully implemented)")
+        # Extract and concatenate segments
+        temp_segments = []
+        for i, (start, end) in enumerate(keep_segments):
+            segment_path = audio_path.replace(Path(audio_path).suffix, f'_seg{i}.mp3')
+            extract_cmd = [
+                'ffmpeg', '-y',
+                '-i', audio_path,
+                '-ss', str(start),
+                '-to', str(end),
+                '-c', 'copy',
+                segment_path
+            ]
+            subprocess.run(extract_cmd, check=True, capture_output=True)
+            temp_segments.append(segment_path)
         
+        # Concatenate segments
+        if len(temp_segments) == 1:
+            shutil.move(temp_segments[0], output_path)
+        else:
+            # Create concat file
+            concat_file = audio_path.replace(Path(audio_path).suffix, '_concat.txt')
+            with open(concat_file, 'w') as f:
+                for seg in temp_segments:
+                    f.write(f"file '{seg}'\n")
+            
+            concat_cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', concat_file,
+                '-c', 'copy',
+                output_path
+            ]
+            subprocess.run(concat_cmd, check=True, capture_output=True)
+            
+            # Cleanup
+            os.remove(concat_file)
+        
+        # Cleanup temp segments
+        for seg in temp_segments:
+            if os.path.exists(seg):
+                os.remove(seg)
+        
+        logging.info(f"Successfully removed {len(filler_timestamps)} filler words")
         return output_path
         
     except Exception as e:
         logging.error(f"Filler word removal failed: {e}")
+        # Return original if removal fails
+        if os.path.exists(output_path):
+            return output_path
         return audio_path
 
 async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
