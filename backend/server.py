@@ -203,6 +203,38 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             final_input = vocals_wav
         
         # Convert to MP3 with normalization and enhancement
+        # Step 1: Measure loudness first
+        logging.info("Measuring audio loudness for precise normalization...")
+        measure_cmd = [
+            'ffmpeg', '-y', '-i', final_input,
+            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json',
+            '-f', 'null', '-'
+        ]
+        measure_result = subprocess.run(measure_cmd, capture_output=True, text=True)
+        
+        # Extract measured values for two-pass normalization
+        import re
+        measured_i = re.search(r'"input_i" : "([^"]+)"', measure_result.stderr)
+        measured_tp = re.search(r'"input_tp" : "([^"]+)"', measure_result.stderr)
+        measured_lra = re.search(r'"input_lra" : "([^"]+)"', measure_result.stderr)
+        measured_thresh = re.search(r'"input_thresh" : "([^"]+)"', measure_result.stderr)
+        
+        # Build two-pass loudnorm parameters
+        if all([measured_i, measured_tp, measured_lra, measured_thresh]):
+            loudnorm_params = (
+                f'loudnorm=I=-16:TP=-1.5:LRA=11:'
+                f'measured_I={measured_i.group(1)}:'
+                f'measured_TP={measured_tp.group(1)}:'
+                f'measured_LRA={measured_lra.group(1)}:'
+                f'measured_thresh={measured_thresh.group(1)}:'
+                f'linear=true'
+            )
+            logging.info("Using two-pass loudnorm for exact -16 LUFS target")
+        else:
+            loudnorm_params = 'loudnorm=I=-16:TP=-1.5:LRA=11'
+            logging.warning("Two-pass loudnorm failed, using single-pass")
+        
+        # Step 2: Apply full processing chain with precise normalization
         final_cmd = [
             'ffmpeg', '-y', '-i', final_input,
             '-af', 
@@ -226,8 +258,8 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
             'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'
             
-            # Final normalization to -16 LUFS MONO target
-            'loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-16:measured_LTP=-2:measured_LRA=1:measured_thresh=-26,'
+            # Precise normalization to -16 LUFS MONO target
+            f'{loudnorm_params},'
             
             # Light compression for consistency
             'acompressor=threshold=-18dB:ratio=3:attack=5:release=50:makeup=2',
