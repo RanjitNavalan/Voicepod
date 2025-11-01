@@ -362,7 +362,7 @@ async def upload_audio(
         raise HTTPException(status_code=400, detail=f"Invalid preset. Choose from: {list(PRESETS.keys())}")
     
     # Validate file
-    if not file.filename.lower().endswith(('.mp3', '.wav', '.m4a', '.ogg')):
+    if not file.filename.lower().endswith(('.mp3', '.wav', '.m4a', '.ogg', '.mpeg', '.mpga', '.mp4', '.webm')):
         raise HTTPException(status_code=400, detail="Unsupported audio format")
     
     # Save upload
