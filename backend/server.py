@@ -208,12 +208,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         
         final_cmd = [
             'ffmpeg', '-y', '-i', final_input,
-            '-af', 
-            # MINIMAL filters to preserve Demucs quality:
-            # NOTE: No loudnorm here - will be applied ONCE at the end in merge_with_music
-            # Reduced silence removal - only remove very long pauses (1+ seconds)
-            'silenceremove=start_periods=1:start_duration=1.0:start_threshold=-50dB:'
-            'stop_periods=-1:stop_duration=1.0:stop_threshold=-50dB',  # Only remove 1+ second silences
+            # NO filters at all - preserve complete audio
             '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
             cleaned_path
         ]
