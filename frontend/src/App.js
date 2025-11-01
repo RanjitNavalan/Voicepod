@@ -266,7 +266,7 @@ const Home = () => {
                 <p className="text-lg font-medium mb-2">
                   {uploadedFile ? uploadedFile.name : audioBlob ? "Recording ready" : "Drop audio file or click to browse"}
                 </p>
-                <p className="text-sm text-gray-400">Supports MP3, WAV, M4A, OGG</p>
+                <p className="text-sm text-gray-400">Supports MP3, WAV, M4A, OGG, MPEG, WebM</p>
                 <input
                   ref={fileInputRef}
                   type="file"
