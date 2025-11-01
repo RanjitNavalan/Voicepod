@@ -386,38 +386,132 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         return audio_path
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
-    """Merge audio with background music using ffmpeg"""
+    """Merge audio with background music, add intro/outro stingers"""
     output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
     
-    # Normalize with proper settings to maintain audibility
-    # Using two-pass loudnorm for better results
-    cmd = [
-        'ffmpeg', '-y',
-        '-i', audio_path,
-        '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7:print_format=summary',  # Less aggressive normalization
-        '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
-        output_path
-    ]
+    try:
+        # Select music based on type
+        music_map = {
+            'ambient': MUSIC_DIR / 'ambient' / 'calm_ambient.mp3',
+            'cinematic': MUSIC_DIR / 'cinematic' / 'dramatic.mp3'
+        }
+        music_file = music_map.get(music_type, music_map['ambient'])
+        intro_stinger = MUSIC_DIR / 'stingers' / 'intro.mp3'
+        outro_stinger = MUSIC_DIR / 'stingers' / 'outro.mp3'
+        
+        if not music_file.exists():
+            raise Exception("Music file not found")
+        
+        # Get duration of voice audio
+        duration_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
+                       '-of', 'default=noprint_wrappers=1:nokey=1', audio_path]
+        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True)
+        voice_duration = float(duration_result.stdout.strip())
+        
+        # Complex filter: 
+        # 1. Add intro stinger
+        # 2. Mix voice with ducked background music  
+        # 3. Add outro stinger
+        filter_complex = (
+            # Load all inputs
+            f"[0:a]volume=1.0[voice];"  # Voice at full volume
+            f"[1:a]atrim=0:{voice_duration},volume=0.15[music];"  # Music at 15% volume, trimmed to voice length
+            f"[2:a]volume=0.8[intro];"  # Intro stinger at 80%
+            f"[3:a]volume=0.8[outro];"  # Outro stinger at 80%
+            # Concatenate intro + (voice+music) + outro
+            f"[intro][voice][music]amix=inputs=2:duration=longest[voice_music];"
+            f"[voice_music][outro]concat=n=2:v=0:a=1[final];"
+            # Final normalization
+            f"[final]loudnorm=I=-14:TP=-1.0:LRA=7"
+        )
+        
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', audio_path,           # 0: voice
+            '-i', str(music_file),      # 1: music
+            '-i', str(intro_stinger),   # 2: intro
+            '-i', str(outro_stinger),   # 3: outro
+            '-filter_complex', filter_complex,
+            '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
+            output_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg music merge failed: {result.stderr}")
+            
+        logging.info("Background music and stingers added successfully")
+        return output_path
+        
+    except Exception as e:
+        logging.warning(f"Music merge failed: {e}. Proceeding without music.")
+        # Fallback: just normalize without music
+        fallback_cmd = [
+            'ffmpeg', '-y',
+            '-i', audio_path,
+            '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
+            '-c:a', 'libmp3lame', '-b:a', '192k',
+            output_path
+        ]
+        subprocess.run(fallback_cmd, check=True, capture_output=True)
+        return output_path
+
+def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
+    """Add ID3 tags and cover image to audio"""
+    ext = '.m4a' if format == 'm4a' else '.mp3'
+    output_path = audio_path.replace('_final.mp3', f'_complete{ext}')
+    cover_image = MUSIC_DIR / 'cover.jpg'
     
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        logging.error(f"FFmpeg error: {result.stderr}")
+    try:
+        if format == 'm4a':
+            # M4A export with cover art
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', audio_path,
+                '-i', str(cover_image),
+                '-map', '0:a',
+                '-map', '1:v',
+                '-c:a', 'aac', '-b:a', '192k',
+                '-c:v', 'copy',
+                '-disposition:v:0', 'attached_pic',
+                '-metadata', f'title={title}',
+                '-metadata', 'artist=Voicepod Studio',
+                '-metadata', 'album=AI-Enhanced Audio',
+                output_path
+            ]
+        else:
+            # MP3 export with cover art
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', audio_path,
+                '-i', str(cover_image),
+                '-map', '0:a',
+                '-map', '1:v',
+                '-c:a', 'copy',
+                '-c:v', 'copy',
+                '-id3v2_version', '3',
+                '-metadata:s:v', 'title=Album cover',
+                '-metadata:s:v', 'comment=Cover (front)',
+                '-metadata', f'title={title}',
+                '-metadata', 'artist=Voicepod Studio',
+                '-metadata', 'album=AI-Enhanced Audio',
+                output_path
+            ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            raise Exception(f"Metadata embedding failed: {result.stderr}")
+            
+        logging.info(f"Metadata and cover art added successfully ({format})")
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Metadata addition failed: {e}")
         # Fallback: simple copy
         shutil.copy(audio_path, output_path)
-    
-    return output_path
-
-def add_metadata(audio_path: str, title: str) -> str:
-    """Add ID3 tags to audio"""
-    output_path = audio_path.replace('_final.mp3', '_complete.mp3')
-    
-    cmd = [
-        'ffmpeg', '-y',
-        '-i', audio_path,
-        '-metadata', f'title={title}',
-        '-metadata', 'artist=Voicepod Studio',
-        '-metadata', 'album=AI-Enhanced Audio',
-        '-c:a', 'copy',  # Copy codec without re-encoding
+        return output_path
         output_path
     ]
     
