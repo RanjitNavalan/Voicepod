@@ -232,3 +232,5 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Phase 1 testing initiated. Priority: (1) Verify SFX at emotion peaks are working correctly and audible but subtle, (2) Measure actual LUFS output and confirm -16 LUFS target is achieved, (3) Verify audio cleanup filters (de-reverb, breath/click attenuation) are effective without degrading quality. All backend endpoints should be tested end-to-end with a sample audio file. Use 'Podcast Calm' preset for initial testing."
+  - agent: "testing"
+    message: "COMPREHENSIVE BACKEND TESTING COMPLETED. Fixed metadata bug in add_metadata function. All API endpoints working. SFX at emotion peaks working correctly. CRITICAL ISSUES FOUND: (1) LUFS normalization not achieving -16 target (measured -18.06 to -inf), (2) Filler word removal too aggressive causing audio duration issues, (3) Background music merge occasionally failing. Demucs vocal separation working well. Metadata embedding working after fix."
