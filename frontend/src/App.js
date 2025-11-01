@@ -336,7 +336,7 @@ const Home = () => {
                   Your Voicepod is Ready!
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <Button
                   size="lg"
                   className="w-full download-button"
@@ -346,6 +346,38 @@ const Home = () => {
                   <Download className="w-5 h-5 mr-2" />
                   Download Voicepod
                 </Button>
+                
+                {/* Transcript Toggle Button */}
+                {transcript && (
+                  <>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setShowTranscript(!showTranscript)}
+                      data-testid="transcript-toggle"
+                    >
+                      <FileText className="w-5 h-5 mr-2" />
+                      {showTranscript ? "Hide Transcript" : "View Transcript"}
+                    </Button>
+                    
+                    {/* Transcript Display */}
+                    {showTranscript && (
+                      <div 
+                        className="p-4 rounded-lg bg-black/40 border border-primary/30 max-h-64 overflow-y-auto"
+                        data-testid="transcript-display"
+                      >
+                        <h4 className="font-semibold mb-2 flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          Transcript
+                        </h4>
+                        <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {transcript}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
