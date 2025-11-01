@@ -275,11 +275,11 @@ def add_metadata(audio_path: str, title: str) -> str:
         '-metadata', f'title={title}',
         '-metadata', 'artist=Voicepod Studio',
         '-metadata', 'album=AI-Enhanced Audio',
-        '-codec', 'copy',
+        '-c', 'copy',  # Copy codec without re-encoding
         output_path
     ]
     
-    subprocess.run(cmd, check=True, capture_output=True)
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return output_path
 
 # ==================== BACKGROUND PROCESSING ====================
