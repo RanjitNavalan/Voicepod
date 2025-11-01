@@ -502,23 +502,23 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         return audio_path
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
-    """Add background music with ducking, intro/outro stingers"""
+    """Add professional background music with smart ducking and intro/outro"""
     output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
     
     try:
-        # Select music files
+        # Select professional music tracks
         music_map = {
-            'ambient': MUSIC_DIR / 'ambient' / 'calm_ambient_smooth.mp3',
-            'cinematic': MUSIC_DIR / 'cinematic' / 'dramatic_smooth.mp3'
+            'ambient': MUSIC_DIR / 'ambient' / 'arietta.mp3',  # Calm, professional
+            'cinematic': MUSIC_DIR / 'cinematic' / 'epic_journey.mp3'  # Dramatic
         }
         music_file = music_map.get(music_type, music_map['ambient'])
         intro_file = MUSIC_DIR / 'stingers' / 'intro_smooth.mp3'
         outro_file = MUSIC_DIR / 'stingers' / 'outro_smooth.mp3'
         
-        if not all([music_file.exists(), intro_file.exists(), outro_file.exists()]):
-            raise Exception("Music files not found")
+        if not music_file.exists():
+            raise Exception(f"Music file not found: {music_file}")
         
-        logging.info("Adding background music with ducking...")
+        logging.info(f"Adding professional background music: {music_file.name}")
         
         # Get voice duration
         duration_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
@@ -526,51 +526,73 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         duration_result = subprocess.run(duration_cmd, capture_output=True, text=True)
         voice_duration = float(duration_result.stdout.strip())
         
-        # Complex filter for professional audio mixing
+        # IMPROVED FILTER: Smart ducking based on voice presence
         filter_complex = (
-            # Input 0: voice (keep at full volume)
-            '[0:a]volume=1.0[voice];'
+            # === VOICE PROCESSING ===
+            '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice_formatted];'
             
-            # Input 1: background music (trim to voice length, very low volume with ducking)
+            # === MUSIC PROCESSING ===
+            # Trim music to voice length + add fades
             f'[1:a]atrim=0:{voice_duration},'
-            'volume=0.08,'  # Very low volume (8% of original)
-            'afade=t=in:st=0:d=2,'  # Fade in over 2 seconds
-            f'afade=t=out:st={voice_duration-3}:d=3[music];'  # Fade out last 3 seconds
+            'aformat=sample_rates=48000:channel_layouts=stereo,'
+            'volume=0.12,'  # Base music volume (12%)
+            'afade=t=in:st=0:d=3,'  # Smooth 3s fade in
+            f'afade=t=out:st={voice_duration-4}:d=4[music_base];'  # Smooth 4s fade out
             
-            # Input 2: intro stinger (gentle)
-            '[2:a]volume=0.4[intro];'
+            # === SMART DUCKING ===
+            # Detect voice presence and duck music intelligently
+            '[voice_formatted]asplit=2[voice_for_duck][voice_clean];'
+            '[voice_for_duck]acompressor=threshold=-25dB:ratio=6:attack=20:release=200[voice_trigger];'
+            '[music_base][voice_trigger]sidechaincompress=threshold=-40dB:ratio=3:attack=100:release=400:makeup=1[music_ducked];'
             
-            # Input 3: outro stinger (gentle)
-            '[3:a]volume=0.4[outro];'
-            
-            # Mix voice and music (music ducks under voice)
-            '[voice][music]amix=inputs=2:duration=first:weights=1 0.5[voice_music];'
-            
-            # Concatenate: intro + (voice+music) + outro
-            '[intro][voice_music][outro]concat=n=3:v=0:a=1[mixed];'
-            
-            # Final normalization
-            '[mixed]loudnorm=I=-16:TP=-1.5:LRA=11'
+            # === MIX VOICE + DUCKED MUSIC ===
+            '[voice_clean][music_ducked]amix=inputs=2:duration=first:dropout_transition=3[voice_music];'
         )
         
-        cmd = [
-            'ffmpeg', '-y',
-            '-i', audio_path,        # 0: voice
-            '-i', str(music_file),   # 1: music
-            '-i', str(intro_file),   # 2: intro
-            '-i', str(outro_file),   # 3: outro
-            '-filter_complex', filter_complex,
-            '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
-            output_path
-        ]
+        # Add intro/outro if they exist
+        if intro_file.exists() and outro_file.exists():
+            filter_complex += (
+                # === INTRO/OUTRO ===
+                '[2:a]volume=0.5,afade=t=out:st=0.8:d=0.4[intro];'
+                '[3:a]volume=0.5,afade=t=in:st=0:d=0.5[outro];'
+                
+                # === CONCATENATE ===
+                '[intro][voice_music][outro]concat=n=3:v=0:a=1[mixed];'
+                
+                # === FINAL NORMALIZATION ===
+                '[mixed]loudnorm=I=-16:TP=-1.5:LRA=11'
+            )
+            
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', audio_path,        # 0: voice
+                '-i', str(music_file),   # 1: music
+                '-i', str(intro_file),   # 2: intro
+                '-i', str(outro_file),   # 3: outro
+                '-filter_complex', filter_complex,
+                '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
+                output_path
+            ]
+        else:
+            # No stingers, just voice + music
+            filter_complex += '[voice_music]loudnorm=I=-16:TP=-1.5:LRA=11'
+            
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', audio_path,        # 0: voice
+                '-i', str(music_file),   # 1: music
+                '-filter_complex', filter_complex,
+                '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
+                output_path
+            ]
         
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
-            logging.error(f"Music merge failed: {result.stderr[:200]}")
+            logging.error(f"Music merge failed: {result.stderr[:500]}")
             raise Exception("Music merge failed")
         
-        logging.info("Music and stingers added successfully")
+        logging.info("Professional music with smart ducking added successfully")
         return output_path
         
     except Exception as e:
