@@ -779,9 +779,10 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
         update_job_progress(job_id, 35, "Analyzing speech, detecting fillers and emotion peaks...")
         analysis = await transcribe_and_analyze(cleaned_path)
         
-        # Step 3: Filler word removal (if detected)
-        update_job_progress(job_id, 50, "Removing filler words...")
-        current_audio = remove_filler_words(cleaned_path, analysis.get('filler_timestamps', []))
+        # Step 3: Filler word removal (DISABLED to preserve audio length)
+        update_job_progress(job_id, 50, "Preserving original audio length...")
+        current_audio = cleaned_path  # Skip filler removal to preserve length
+        logging.info("Filler removal skipped to preserve audio length")
         
         # Step 4: Optional ElevenLabs re-voicing
         if preset.use_elevenlabs:
