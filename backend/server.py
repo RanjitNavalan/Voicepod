@@ -281,48 +281,59 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
             file=audio_file,
             model="whisper-1",
             response_format="verbose_json",
-            timestamp_granularities=["word", "segment"]
+            timestamp_granularities=["segment"]  # Only segment, word-level not always available
         )
     
     # Handle both dict and object responses
     if isinstance(response, dict):
         transcript = response.get('text', '')
         segments = response.get('segments', [])
-        words = response.get('words', [])
     else:
         transcript = response.text if hasattr(response, 'text') else str(response)
         segments = response.segments if hasattr(response, 'segments') else []
-        words = response.words if hasattr(response, 'words') else []
     
-    # Detect filler words with timestamps
+    # Detect filler words from transcript (simpler approach)
     filler_words = ['um', 'uh', 'like', 'you know', 'so', 'actually', 'basically', 'literally']
     filler_timestamps = []
     
-    for word in words:
-        word_text = word.get('word', '').lower().strip() if isinstance(word, dict) else ''
-        if any(filler in word_text for filler in filler_words):
-            start = word.get('start', 0) if isinstance(word, dict) else 0
-            end = word.get('end', 0) if isinstance(word, dict) else 0
-            filler_timestamps.append((start, end))
+    # Try to detect fillers from segments
+    if segments:
+        for segment in segments:
+            if isinstance(segment, dict):
+                text = segment.get('text', '').lower()
+                start = segment.get('start', 0)
+                end = segment.get('end', 0)
+            else:
+                text = (segment.text if hasattr(segment, 'text') else '').lower()
+                start = segment.start if hasattr(segment, 'start') else 0
+                end = segment.end if hasattr(segment, 'end') else 0
+            
+            # Check if segment contains filler words
+            for filler in filler_words:
+                if filler in text:
+                    filler_timestamps.append((start, end))
+                    break
     
-    # Simple emotion peak detection (look for segments with high energy words)
+    # Simple emotion peak detection
     emotion_peaks = []
-    for segment in segments:
-        # Handle both dict and object segments
-        if isinstance(segment, dict):
-            text = segment.get('text', '').strip()
-            start = segment.get('start', 0)
-        else:
-            text = segment.text.strip() if hasattr(segment, 'text') else ''
-            start = segment.start if hasattr(segment, 'start') else 0
-        
-        # Simple heuristic: look for exclamations, questions
-        if any(word in text.lower() for word in ['!', '?', 'wow', 'amazing', 'incredible']):
-            emotion_peaks.append(start)
+    if segments:
+        for segment in segments:
+            if isinstance(segment, dict):
+                text = segment.get('text', '').strip()
+                start = segment.get('start', 0)
+            else:
+                text = segment.text.strip() if hasattr(segment, 'text') else ''
+                start = segment.start if hasattr(segment, 'start') else 0
+            
+            # Simple heuristic: look for exclamations, questions
+            if any(word in text.lower() for word in ['!', '?', 'wow', 'amazing', 'incredible']):
+                emotion_peaks.append(start)
     
     return {
         "transcript": transcript,
-        "emotion_peaks": emotion_peaks[:2],  # Max 2 peaks
+        "emotion_peaks": emotion_peaks[:2] if emotion_peaks else [],
+        "filler_timestamps": filler_timestamps[:10] if filler_timestamps else []
+    }
         "filler_timestamps": filler_timestamps[:10]  # Max 10 fillers to remove
     }
 
