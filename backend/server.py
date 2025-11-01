@@ -299,7 +299,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
                 'adeclip,'  # Declip
                 'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
                 'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'
-                'loudnorm=I=-16:TP=-1.5:LRA=11,'  # -16 LUFS target
+                # No loudnorm - will be applied once at the end
                 'acompressor=threshold=-18dB:ratio=3:attack=5:release=50',
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
