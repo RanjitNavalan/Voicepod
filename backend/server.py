@@ -695,14 +695,20 @@ async def download_audio(job_id: str):
     if job_store[job_id]['status'] != 'completed':
         raise HTTPException(status_code=400, detail="Processing not complete")
     
-    file_path = PROCESSED_DIR / f"{job_id}.mp3"
+    # Check format
+    format = job_store[job_id].get('format', 'mp3')
+    file_ext = '.m4a' if format == 'm4a' else '.mp3'
+    file_path = PROCESSED_DIR / f"{job_id}{file_ext}"
+    
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
+    media_type = "audio/mp4" if format == 'm4a' else "audio/mpeg"
+    
     return FileResponse(
         path=file_path,
-        media_type="audio/mpeg",
-        filename=f"voicepod_{job_id[:8]}.mp3"
+        media_type=media_type,
+        filename=f"voicepod_{job_id[:8]}{file_ext}"
     )
 
 @api_router.get("/projects")
