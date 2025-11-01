@@ -21,6 +21,8 @@ const Home = () => {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState("");
   const [downloadUrl, setDownloadUrl] = useState(null);
+  const [transcript, setTranscript] = useState("");
+  const [showTranscript, setShowTranscript] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const mediaRecorderRef = useRef(null);
