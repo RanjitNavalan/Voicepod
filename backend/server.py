@@ -136,7 +136,7 @@ def update_job_progress(job_id: str, progress: int, step: str, status: str = "pr
         })
 
 async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
-    """Process audio with Cleanvoice API"""
+    """Process audio with Cleanvoice API or local AI-powered noise reduction"""
     try:
         # First convert audio to MP3 if needed
         temp_mp3 = audio_path.replace(Path(audio_path).suffix, '_temp.mp3')
@@ -191,31 +191,66 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         raise Exception("Cleanvoice timeout")
         
     except Exception as e:
-        logging.warning(f"Cleanvoice failed: {e}. Falling back to local audio processing.")
-        # Fallback: Local audio processing with ffmpeg
+        logging.warning(f"Cleanvoice failed: {e}. Using AI-powered local noise reduction.")
+        # Fallback: AI-powered noise reduction with noisereduce
         cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
         
-        # Advanced audio cleanup using ffmpeg filters
-        fallback_cmd = [
-            'ffmpeg', '-y', '-i', audio_path,
-            '-af', 
-            # Noise reduction, high-pass filter, silence removal, normalization
-            'highpass=f=80,'  # Remove low-frequency rumble
-            'lowpass=f=12000,'  # Remove high-frequency noise
-            'afftdn=nf=-20,'  # FFT-based noise reduction
-            'silenceremove=start_periods=1:start_duration=0.1:start_threshold=-50dB:'
-            'stop_periods=-1:stop_duration=0.3:stop_threshold=-50dB,'  # Remove silence
-            'loudnorm=I=-14:TP=-1.0:LRA=7',  # Normalize volume
-            '-c:a', 'libmp3lame', '-b:a', '192k',
-            cleaned_path
-        ]
-        result = subprocess.run(fallback_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            logging.error(f"Fallback processing failed: {result.stderr}")
-            # Last resort: simple conversion
-            simple_cmd = ['ffmpeg', '-y', '-i', audio_path, '-c:a', 'libmp3lame', '-b:a', '192k', cleaned_path]
+        try:
+            import noisereduce as nr
+            import librosa
+            import soundfile as sf
+            
+            # Load audio
+            audio_data, sample_rate = librosa.load(audio_path, sr=None, mono=False)
+            
+            # Apply noise reduction (stationary noise reduction)
+            reduced_noise = nr.reduce_noise(
+                y=audio_data, 
+                sr=sample_rate,
+                stationary=True,
+                prop_decrease=0.8,  # Reduce noise by 80%
+                freq_mask_smooth_hz=500,
+                time_mask_smooth_ms=50
+            )
+            
+            # Save to temporary WAV
+            temp_wav = cleaned_path.replace('.mp3', '_temp.wav')
+            sf.write(temp_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
+            
+            # Apply additional processing: silence removal and normalization
+            final_cmd = [
+                'ffmpeg', '-y', '-i', temp_wav,
+                '-af',
+                'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
+                'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'  # Remove silence
+                'highpass=f=80,'  # Remove rumble
+                'loudnorm=I=-14:TP=-1.0:LRA=7',  # Normalize
+                '-c:a', 'libmp3lame', '-b:a', '192k',
+                cleaned_path
+            ]
+            result = subprocess.run(final_cmd, capture_output=True, text=True)
+            
+            # Cleanup temp files
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+            
+            if result.returncode != 0:
+                raise Exception(f"FFmpeg post-processing failed: {result.stderr}")
+                
+            logging.info("AI-powered noise reduction completed successfully")
+            return cleaned_path
+            
+        except Exception as fallback_error:
+            logging.error(f"Local noise reduction failed: {fallback_error}")
+            # Last resort: basic ffmpeg processing
+            simple_cmd = [
+                'ffmpeg', '-y', '-i', audio_path,
+                '-af', 'highpass=f=80,lowpass=f=10000,loudnorm=I=-14:TP=-1.0:LRA=7',
+                '-c:a', 'libmp3lame', '-b:a', '192k',
+                cleaned_path
+            ]
             subprocess.run(simple_cmd, check=True, capture_output=True)
-        return cleaned_path
+            return cleaned_path
 
 async def transcribe_and_analyze(audio_path: str) -> Dict:
     """Transcribe audio and detect emotion peaks"""
