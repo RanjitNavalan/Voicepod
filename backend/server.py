@@ -537,10 +537,11 @@ def add_emotion_sfx(audio_path: str, emotion_peaks: List[float]) -> str:
             )
         
         # Mix all together and apply loudnorm to preserve -16 LUFS target
+        # Use duration=longest to ensure SFX plays completely
         mix_inputs = ['[main]'] + [f'[sfx{i}]' for i in range(len(peaks_to_use))]
         filter_parts.append(
             f'{" ".join(mix_inputs)}amix=inputs={len(mix_inputs)}:'
-            f'duration=first:dropout_transition=2,'
+            f'duration=longest:dropout_transition=2,'
             f'loudnorm=I=-16:TP=-1.5:LRA=11'  # Re-apply loudnorm after SFX mixing
         )
         
