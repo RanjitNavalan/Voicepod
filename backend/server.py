@@ -814,7 +814,8 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
                 "duration": "N/A",
                 "preset": preset_name,
                 "emotion_peaks": len(analysis['emotion_peaks']),
-                "fillers_detected": len(analysis.get('filler_timestamps', []))
+                "fillers_detected": len(analysis.get('filler_timestamps', [])),
+                "transcript": analysis['transcript']  # Add transcript to statistics for frontend
             }
         })
         
