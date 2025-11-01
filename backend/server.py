@@ -763,9 +763,13 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
         update_job_progress(job_id, 75, "Adding professional background music with smart ducking...")
         merged_path = merge_with_music(current_audio, preset.music_type, analysis['emotion_peaks'])
         
+        # Step 5.5: Add emotion SFX at peaks (NEW - subtle accents)
+        update_job_progress(job_id, 85, "Adding subtle SFX at emotion peaks...")
+        sfx_path = add_emotion_sfx(merged_path, analysis['emotion_peaks'])
+        
         # Step 6: Metadata and cover art
         update_job_progress(job_id, 90, "Adding metadata and cover art...")
-        final_path = add_metadata(merged_path, f"Voicepod_{job_id[:8]}", export_format)
+        final_path = add_metadata(sfx_path, f"Voicepod_{job_id[:8]}", export_format)
         
         # Move to processed directory
         file_ext = '.m4a' if export_format == 'm4a' else '.mp3'
