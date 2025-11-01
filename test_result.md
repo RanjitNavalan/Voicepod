@@ -242,19 +242,19 @@ backend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 0
+  version: "1.1"
+  test_sequence: 1
   run_ui: false
 
 test_plan:
   current_focus:
-    - "SFX at Emotion Peaks (NEW)"
     - "Loudness Normalization to -16 LUFS"
-    - "Audio Cleanup (Noise Reduction, De-reverb, Breath/Click Attenuation)"
-    - "Demucs Vocal Separation"
-  stuck_tasks: []
-  test_all: true
-  test_priority: "high_first"
+    - "Background Music Integration with Ducking"
+  stuck_tasks:
+    - "Loudness Normalization to -16 LUFS"
+    - "Background Music Integration with Ducking"
+  test_all: false
+  test_priority: "stuck_first"
 
 agent_communication:
   - agent: "main"
