@@ -628,11 +628,15 @@ async def get_presets():
 async def upload_audio(
     file: UploadFile = File(...),
     preset: str = "podcast_calm",
+    format: str = "mp3",
     background_tasks: BackgroundTasks = None
 ):
     """Upload audio and start processing"""
     if preset not in PRESETS:
         raise HTTPException(status_code=400, detail=f"Invalid preset. Choose from: {list(PRESETS.keys())}")
+    
+    if format not in ['mp3', 'm4a']:
+        raise HTTPException(status_code=400, detail="Format must be 'mp3' or 'm4a'")
     
     # Validate file
     if not file.filename.lower().endswith(('.mp3', '.wav', '.m4a', '.ogg', '.mpeg', '.mpga', '.mp4', '.webm')):
@@ -652,11 +656,12 @@ async def upload_audio(
         "progress": 10,
         "current_step": "Uploaded, starting processing...",
         "original_filename": file.filename,
-        "preset": preset
+        "preset": preset,
+        "format": format
     }
     
     # Start background processing
-    background_tasks.add_task(process_audio_pipeline, job_id, str(audio_path), preset)
+    background_tasks.add_task(process_audio_pipeline, job_id, str(audio_path), preset, format)
     
     return AudioUploadResponse(
         job_id=job_id,
