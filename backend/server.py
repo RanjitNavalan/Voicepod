@@ -487,16 +487,25 @@ def remove_filler_words(audio_path: str, filler_timestamps: List[tuple]) -> str:
         return audio_path
 
 async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
-    """Apply ElevenLabs voice regeneration"""
+    """Apply ElevenLabs voice regeneration - generates clean AI voice"""
     try:
-        logging.info("Starting ElevenLabs AI voice generation...")
+        logging.info("=" * 60)
+        logging.info("ELEVENLABS AI NARRATOR - Starting voice generation")
+        logging.info("=" * 60)
+        
         voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
         
         if not transcript or len(transcript.strip()) < 10:
-            logging.warning(f"Transcript too short ({len(transcript)} chars), skipping ElevenLabs")
+            logging.error(f"❌ Transcript too short ({len(transcript)} chars), cannot generate AI voice")
+            logging.error(f"Transcript: '{transcript[:100]}'")
             return audio_path
         
-        logging.info(f"Generating AI voice for {len(transcript)} character transcript...")
+        logging.info(f"✓ Transcript length: {len(transcript)} characters")
+        logging.info(f"✓ Transcript preview: '{transcript[:100]}...'")
+        logging.info(f"✓ Using voice: Rachel (ID: {voice_id})")
+        logging.info(f"✓ Model: eleven_multilingual_v2")
+        
+        logging.info("Calling ElevenLabs API...")
         audio_generator = elevenlabs_client.text_to_speech.convert(
             text=transcript,
             voice_id=voice_id,
@@ -504,23 +513,39 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         )
         
         # Save audio
+        logging.info("Receiving audio data from ElevenLabs...")
         audio_data = b""
+        chunk_count = 0
         for chunk in audio_generator:
             audio_data += chunk
+            chunk_count += 1
+        
+        logging.info(f"✓ Received {chunk_count} chunks, total {len(audio_data)} bytes")
         
         if len(audio_data) < 1000:
-            logging.warning(f"ElevenLabs returned very short audio ({len(audio_data)} bytes)")
+            logging.error(f"❌ ElevenLabs returned very short audio ({len(audio_data)} bytes)")
+            logging.error("This usually means API call failed or transcript was too short")
             return audio_path
         
         revoiced_path = audio_path.replace(Path(audio_path).suffix, '_revoiced.mp3')
         with open(revoiced_path, 'wb') as f:
             f.write(audio_data)
         
-        logging.info(f"ElevenLabs AI voice generated successfully ({len(audio_data)} bytes)")
+        logging.info(f"✓ AI voice saved to: {revoiced_path}")
+        logging.info(f"✓ File size: {len(audio_data) / 1024:.2f} KB")
+        logging.info("=" * 60)
+        logging.info("ELEVENLABS SUCCESS - Clean AI voice generated!")
+        logging.info("=" * 60)
+        
         return revoiced_path
         
     except Exception as e:
-        logging.error(f"ElevenLabs failed: {e}. Skipping re-voicing.")
+        logging.error("=" * 60)
+        logging.error(f"❌ ELEVENLABS FAILED: {e}")
+        logging.error(f"Error type: {type(e).__name__}")
+        logging.error(f"Error details: {str(e)}")
+        logging.error("Falling back to original (noisy) audio")
+        logging.error("=" * 60)
         # Fallback: return original
         return audio_path
 
