@@ -137,18 +137,18 @@
 
 /* Download Card */
 .download-card {
-  border: 2px solid rgba(34, 197, 94, 0.4);
-  background: rgba(34, 197, 94, 0.05);
+  border: 2px solid rgba(49, 163, 148, 0.6);
+  background: rgba(49, 163, 148, 0.1);
   animation: glow 2s ease-in-out infinite;
 }
 
 @keyframes glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
+  0%, 100% { box-shadow: 0 0 20px rgba(49, 163, 148, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(49, 163, 148, 0.5); }
 }
 
 .download-button {
-  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+  background: linear-gradient(135deg, #31A394 0%, #2A8D7E 100%);
   font-weight: 600;
   font-size: 1.125rem;
   padding: 1.5rem;
@@ -157,12 +157,12 @@
 
 .download-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(34, 197, 94, 0.4);
+  box-shadow: 0 12px 24px rgba(49, 163, 148, 0.5);
 }
 
 /* Progress Bar */
 .progress-bar {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(49, 163, 148, 0.3);
 }
 
 /* Tabs */
