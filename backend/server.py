@@ -194,16 +194,28 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
             timestamp_granularities=["segment"]
         )
     
-    transcript = response.text
+    # Handle both dict and object responses
+    if isinstance(response, dict):
+        transcript = response.get('text', '')
+        segments = response.get('segments', [])
+    else:
+        transcript = response.text if hasattr(response, 'text') else str(response)
+        segments = response.segments if hasattr(response, 'segments') else []
     
     # Simple emotion peak detection (look for segments with high energy words)
     emotion_peaks = []
-    if hasattr(response, 'segments'):
-        for segment in response.segments:
-            # Simple heuristic: look for exclamations, questions, long segments
-            text = segment.text.strip()
-            if any(word in text.lower() for word in ['!', '?', 'wow', 'amazing', 'incredible']):
-                emotion_peaks.append(segment.start)
+    for segment in segments:
+        # Handle both dict and object segments
+        if isinstance(segment, dict):
+            text = segment.get('text', '').strip()
+            start = segment.get('start', 0)
+        else:
+            text = segment.text.strip() if hasattr(segment, 'text') else ''
+            start = segment.start if hasattr(segment, 'start') else 0
+        
+        # Simple heuristic: look for exclamations, questions
+        if any(word in text.lower() for word in ['!', '?', 'wow', 'amazing', 'incredible']):
+            emotion_peaks.append(start)
     
     return {
         "transcript": transcript,
