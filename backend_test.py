@@ -205,7 +205,7 @@ class VoicepodTester:
                 'ffmpeg', '-i', audio_path, '-af', 'loudnorm=print_format=json', 
                 '-f', 'null', '-'
             ]
-            result = subprocess.run(lufs_cmd, capture_output=True, text=True, stderr=subprocess.STDOUT)
+            result = subprocess.run(lufs_cmd, capture_output=True, text=True)
             
             # Parse LUFS from output
             output_lines = result.stdout.split('\n')
