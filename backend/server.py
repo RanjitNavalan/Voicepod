@@ -192,15 +192,18 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         
     except Exception as e:
         logging.warning(f"Cleanvoice failed: {e}. Falling back to basic processing.")
-        # Fallback: Just convert to normalized MP3
+        # Fallback: Just convert to MP3 with light normalization
         cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
         fallback_cmd = [
             'ffmpeg', '-y', '-i', audio_path,
-            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-af', 'volume=1.5',  # Slight boost instead of aggressive normalization
             '-c:a', 'libmp3lame', '-b:a', '192k',
             cleaned_path
         ]
-        subprocess.run(fallback_cmd, check=True, capture_output=True)
+        result = subprocess.run(fallback_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            # If that fails, just copy
+            shutil.copy(audio_path, cleaned_path)
         return cleaned_path
 
 async def transcribe_and_analyze(audio_path: str) -> Dict:
