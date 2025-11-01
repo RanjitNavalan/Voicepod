@@ -690,8 +690,8 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
         else:
             update_job_progress(job_id, 60, "Skipping AI re-voicing...")
         
-        # Step 5: Final normalization
-        update_job_progress(job_id, 75, "Normalizing audio levels...")
+        # Step 5: Professional music with smart ducking
+        update_job_progress(job_id, 75, "Adding professional background music with smart ducking...")
         merged_path = merge_with_music(current_audio, preset.music_type, analysis['emotion_peaks'])
         
         # Step 6: Metadata and cover art
