@@ -512,11 +512,6 @@ def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
         # Fallback: simple copy
         shutil.copy(audio_path, output_path)
         return output_path
-        output_path
-    ]
-    
-    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    return output_path
 
 # ==================== BACKGROUND PROCESSING ====================
 
