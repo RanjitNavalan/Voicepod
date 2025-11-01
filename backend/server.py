@@ -520,37 +520,41 @@ def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
 
 # ==================== BACKGROUND PROCESSING ====================
 
-async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str):
+async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str, export_format: str = 'mp3'):
     """Complete audio processing pipeline"""
     try:
         preset = PRESETS[preset_name]
         
-        # Step 1: Cleanvoice cleanup
-        update_job_progress(job_id, 20, "Cleaning audio (removing noise, fillers)...")
+        # Step 1: AI Noise Reduction
+        update_job_progress(job_id, 15, "Cleaning audio with AI noise reduction...")
         cleaned_path = await cleanvoice_cleanup(audio_path, preset.cleanvoice_config)
         
-        # Step 2: Transcription and emotion analysis
-        update_job_progress(job_id, 40, "Analyzing speech and detecting emotion peaks...")
+        # Step 2: Transcription and analysis
+        update_job_progress(job_id, 35, "Analyzing speech, detecting fillers and emotion peaks...")
         analysis = await transcribe_and_analyze(cleaned_path)
         
-        # Step 3: Optional ElevenLabs re-voicing
-        current_audio = cleaned_path
+        # Step 3: Filler word removal (if detected)
+        update_job_progress(job_id, 50, "Removing filler words...")
+        current_audio = remove_filler_words(cleaned_path, analysis.get('filler_timestamps', []))
+        
+        # Step 4: Optional ElevenLabs re-voicing
         if preset.use_elevenlabs:
             update_job_progress(job_id, 60, "Applying AI narrator voice...")
-            current_audio = await apply_elevenlabs_revoice(cleaned_path, analysis['transcript'])
+            current_audio = await apply_elevenlabs_revoice(current_audio, analysis['transcript'])
         else:
             update_job_progress(job_id, 60, "Skipping AI re-voicing...")
         
-        # Step 4: Music merge
-        update_job_progress(job_id, 80, "Adding background music and accents...")
+        # Step 5: Music merge with intro/outro stingers
+        update_job_progress(job_id, 75, "Adding background music, intro and outro...")
         merged_path = merge_with_music(current_audio, preset.music_type, analysis['emotion_peaks'])
         
-        # Step 5: Metadata
-        update_job_progress(job_id, 90, "Finalizing with metadata...")
-        final_path = add_metadata(merged_path, f"Voicepod_{job_id[:8]}")
+        # Step 6: Metadata and cover art
+        update_job_progress(job_id, 90, "Adding metadata and cover art...")
+        final_path = add_metadata(merged_path, f"Voicepod_{job_id[:8]}", export_format)
         
         # Move to processed directory
-        final_filename = f"{job_id}.mp3"
+        file_ext = '.m4a' if export_format == 'm4a' else '.mp3'
+        final_filename = f"{job_id}{file_ext}"
         final_destination = PROCESSED_DIR / final_filename
         shutil.move(final_path, final_destination)
         
@@ -561,8 +565,30 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str)
             "current_step": "Complete!",
             "download_url": f"/api/download/{job_id}",
             "transcript": analysis['transcript'],
+            "format": export_format,
             "statistics": {
                 "duration": "N/A",
+                "preset": preset_name,
+                "emotion_peaks": len(analysis['emotion_peaks']),
+                "fillers_detected": len(analysis.get('filler_timestamps', []))
+            }
+        })
+        
+        # Cleanup temp files
+        for temp_file in [audio_path, cleaned_path, current_audio, merged_path]:
+            if os.path.exists(temp_file) and temp_file != str(final_destination):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+        
+    except Exception as e:
+        job_store[job_id].update({
+            "status": "failed",
+            "error": str(e),
+            "current_step": "Error occurred"
+        })
+        logging.error(f"Processing failed for {job_id}: {e}")
                 "preset": preset_name,
                 "emotion_peaks": len(analysis['emotion_peaks'])
             }
