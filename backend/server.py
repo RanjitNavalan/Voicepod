@@ -311,9 +311,15 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             final_cmd = [
                 'ffmpeg', '-y', '-i', final_input,
-                '-af', 'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
-                       'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'
-                       'loudnorm=I=-14:TP=-1.0:LRA=7',
+                '-af', 
+                'highpass=f=80,'
+                'lowpass=f=10000,'
+                'adeclick=w=5:t=2,'  # Click removal
+                'adeclip,'  # Declip
+                'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
+                'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'
+                'loudnorm=I=-16:TP=-1.5:LRA=11,'  # -16 LUFS target
+                'acompressor=threshold=-18dB:ratio=3:attack=5:release=50',
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
             ]
