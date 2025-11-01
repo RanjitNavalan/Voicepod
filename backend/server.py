@@ -379,52 +379,17 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         return audio_path
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
-    """Merge audio with background music, add intro/outro stingers"""
+    """Normalize audio without background music (to avoid unwanted sounds)"""
     output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
     
     try:
-        # Select music based on type
-        music_map = {
-            'ambient': MUSIC_DIR / 'ambient' / 'calm_ambient.mp3',
-            'cinematic': MUSIC_DIR / 'cinematic' / 'dramatic.mp3'
-        }
-        music_file = music_map.get(music_type, music_map['ambient'])
-        intro_stinger = MUSIC_DIR / 'stingers' / 'intro.mp3'
-        outro_stinger = MUSIC_DIR / 'stingers' / 'outro.mp3'
+        logging.info("Normalizing audio without background music...")
         
-        if not music_file.exists():
-            raise Exception("Music file not found")
-        
-        # Get duration of voice audio
-        duration_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
-                       '-of', 'default=noprint_wrappers=1:nokey=1', audio_path]
-        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True)
-        voice_duration = float(duration_result.stdout.strip())
-        
-        # Complex filter: 
-        # 1. Add intro stinger
-        # 2. Mix voice with ducked background music  
-        # 3. Add outro stinger
-        filter_complex = (
-            # Load all inputs
-            f"[0:a]volume=1.0[voice];"  # Voice at full volume
-            f"[1:a]atrim=0:{voice_duration},volume=0.15[music];"  # Music at 15% volume, trimmed to voice length
-            f"[2:a]volume=0.8[intro];"  # Intro stinger at 80%
-            f"[3:a]volume=0.8[outro];"  # Outro stinger at 80%
-            # Concatenate intro + (voice+music) + outro
-            f"[intro][voice][music]amix=inputs=2:duration=longest[voice_music];"
-            f"[voice_music][outro]concat=n=2:v=0:a=1[final];"
-            # Final normalization
-            f"[final]loudnorm=I=-14:TP=-1.0:LRA=7"
-        )
-        
+        # Just normalize the audio without music/stingers
         cmd = [
             'ffmpeg', '-y',
-            '-i', audio_path,           # 0: voice
-            '-i', str(music_file),      # 1: music
-            '-i', str(intro_stinger),   # 2: intro
-            '-i', str(outro_stinger),   # 3: outro
-            '-filter_complex', filter_complex,
+            '-i', audio_path,
+            '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
             '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
             output_path
         ]
@@ -432,22 +397,15 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
-            raise Exception(f"FFmpeg music merge failed: {result.stderr}")
+            raise Exception(f"FFmpeg normalization failed: {result.stderr}")
             
-        logging.info("Background music and stingers added successfully")
+        logging.info("Audio normalization completed successfully")
         return output_path
         
     except Exception as e:
-        logging.warning(f"Music merge failed: {e}. Proceeding without music.")
-        # Fallback: just normalize without music
-        fallback_cmd = [
-            'ffmpeg', '-y',
-            '-i', audio_path,
-            '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
-            '-c:a', 'libmp3lame', '-b:a', '192k',
-            output_path
-        ]
-        subprocess.run(fallback_cmd, check=True, capture_output=True)
+        logging.error(f"Normalization failed: {e}. Using fallback.")
+        # Fallback: simple copy
+        shutil.copy(audio_path, output_path)
         return output_path
 
 def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
