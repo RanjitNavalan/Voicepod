@@ -207,8 +207,9 @@ class VoicepodTester:
             ]
             result = subprocess.run(lufs_cmd, capture_output=True, text=True)
             
-            # Parse LUFS from output
-            output_lines = result.stdout.split('\n')
+            # Parse LUFS from output (check both stdout and stderr)
+            output_text = result.stderr + result.stdout
+            output_lines = output_text.split('\n')
             for i, line in enumerate(output_lines):
                 if '"input_i"' in line and i < len(output_lines) - 10:
                     # Try to extract JSON block
