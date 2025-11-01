@@ -202,69 +202,18 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             logging.warning(f"Additional noise reduction failed: {nr_error}, using Demucs vocals directly")
             final_input = vocals_wav
         
-        # Convert to MP3 with normalization and enhancement
-        # Step 1: Measure loudness first
-        logging.info("Measuring audio loudness for precise normalization...")
-        measure_cmd = [
-            'ffmpeg', '-y', '-i', final_input,
-            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json',
-            '-f', 'null', '-'
-        ]
-        measure_result = subprocess.run(measure_cmd, capture_output=True, text=True)
+        # Convert to MP3 with MINIMAL processing to preserve Demucs quality
+        # Demucs already did the heavy lifting - just normalize and export
+        logging.info("Applying minimal post-processing to preserve Demucs quality...")
         
-        # Extract measured values for two-pass normalization
-        import re
-        measured_i = re.search(r'"input_i" : "([^"]+)"', measure_result.stderr)
-        measured_tp = re.search(r'"input_tp" : "([^"]+)"', measure_result.stderr)
-        measured_lra = re.search(r'"input_lra" : "([^"]+)"', measure_result.stderr)
-        measured_thresh = re.search(r'"input_thresh" : "([^"]+)"', measure_result.stderr)
-        
-        # Build two-pass loudnorm parameters
-        if all([measured_i, measured_tp, measured_lra, measured_thresh]):
-            loudnorm_params = (
-                f'loudnorm=I=-16:TP=-1.5:LRA=11:'
-                f'measured_I={measured_i.group(1)}:'
-                f'measured_TP={measured_tp.group(1)}:'
-                f'measured_LRA={measured_lra.group(1)}:'
-                f'measured_thresh={measured_thresh.group(1)}:'
-                f'linear=true'
-            )
-            logging.info("Using two-pass loudnorm for exact -16 LUFS target")
-        else:
-            loudnorm_params = 'loudnorm=I=-16:TP=-1.5:LRA=11'
-            logging.warning("Two-pass loudnorm failed, using single-pass")
-        
-        # Step 2: Apply full processing chain with precise normalization
         final_cmd = [
             'ffmpeg', '-y', '-i', final_input,
             '-af', 
-            # Voice Enhancement Chain (Production Quality):
-            'highpass=f=80,'  # Remove very low frequencies (rumble)
-            'lowpass=f=10000,'  # Keep speech frequencies only
-            
-            # De-reverb using atempo trick and equalizer
-            'aecho=0.8:0.9:40:0.3,'  # Subtle echo cancellation
-            'equalizer=f=1000:t=q:w=2:g=-2,'  # Reduce reverb frequencies
-            
-            # Breath removal (detect and reduce low-frequency breaths)
-            'highpass=f=150:poles=2,'  # Additional high-pass for breath sounds
-            'compand=attacks=0:points=-80/-80|-45/-45|-27/-15|0/-7.5:gain=0:volume=-90,'  # Gate for breaths
-            
-            # Click/pop removal using median filter
-            'adeclick=w=5:t=2,'  # Remove clicks
-            'adeclip,'  # Remove clipping artifacts
-            
-            # Silence removal
-            'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
-            'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'
-            
-            # Precise normalization to -16 LUFS MONO target
-            f'{loudnorm_params},'
-            
-            # Light compression for consistency
-            'acompressor=threshold=-18dB:ratio=3:attack=5:release=50:makeup=2',
-            
-            '-c:a', 'libmp3lame', '-b:a', '192k',
+            # MINIMAL filters to preserve Demucs quality:
+            'silenceremove=start_periods=1:start_duration=0.3:start_threshold=-50dB:'
+            'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'  # Remove silence only
+            'loudnorm=I=-16:TP=-1.5:LRA=11',  # Normalize to -16 LUFS
+            '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
             cleaned_path
         ]
         subprocess.run(final_cmd, check=True, capture_output=True)
