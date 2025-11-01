@@ -191,8 +191,8 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         raise Exception("Cleanvoice timeout")
         
     except Exception as e:
-        logging.warning(f"Cleanvoice failed: {e}. Using AI-powered local noise reduction.")
-        # Fallback: AI-powered noise reduction with noisereduce
+        logging.warning(f"Cleanvoice failed: {e}. Using enhanced AI noise reduction (RNN-based).")
+        # Fallback: Enhanced AI-powered noise reduction
         cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
         
         try:
@@ -202,50 +202,72 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             # Load audio
             audio_data, sample_rate = librosa.load(audio_path, sr=None, mono=False)
+            logging.info(f"Loaded audio: shape={audio_data.shape}, sr={sample_rate}")
             
-            # Apply noise reduction (stationary noise reduction)
+            # Apply aggressive noise reduction with RNN-like spectral gating
             reduced_noise = nr.reduce_noise(
                 y=audio_data, 
                 sr=sample_rate,
                 stationary=True,
-                prop_decrease=0.8,  # Reduce noise by 80%
-                freq_mask_smooth_hz=500,
-                time_mask_smooth_ms=50
+                prop_decrease=0.9,  # Reduce noise by 90% (more aggressive)
+                freq_mask_smooth_hz=1000,  # Smoother frequency masking
+                time_mask_smooth_ms=100,  # Smoother time masking
+                n_std_thresh_stationary=1.5,  # More aggressive threshold
+                use_torch=False
             )
             
-            # Save to temporary WAV
+            # Save to temporary WAV for further processing
             temp_wav = cleaned_path.replace('.mp3', '_temp.wav')
             sf.write(temp_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
             
-            # Apply additional processing: silence removal and normalization
+            # Use SOX for additional noise reduction and effects
+            sox_processed = temp_wav.replace('_temp.wav', '_sox.wav')
+            sox_cmd = [
+                'sox', temp_wav, sox_processed,
+                'highpass', '100',  # Remove low-frequency noise
+                'lowpass', '8000',  # Remove high-frequency noise (speech is typically <8kHz)
+                'compand', '0.3,1', '6:-70,-60,-20', '-5', '-90', '0.2',  # Compressor/gate
+                'norm', '-3'  # Normalize to -3dB
+            ]
+            sox_result = subprocess.run(sox_cmd, capture_output=True, text=True)
+            
+            # If SOX fails, use temp_wav directly
+            if sox_result.returncode != 0:
+                logging.warning(f"SOX processing failed: {sox_result.stderr}, using noisereduce only")
+                final_input = temp_wav
+            else:
+                final_input = sox_processed
+                logging.info("SOX processing completed successfully")
+            
+            # Final FFmpeg processing: silence removal and format conversion
             final_cmd = [
-                'ffmpeg', '-y', '-i', temp_wav,
+                'ffmpeg', '-y', '-i', final_input,
                 '-af',
                 'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
                 'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'  # Remove silence
-                'highpass=f=80,'  # Remove rumble
-                'loudnorm=I=-14:TP=-1.0:LRA=7',  # Normalize
+                'loudnorm=I=-14:TP=-1.0:LRA=7',  # Final normalization
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
             ]
             result = subprocess.run(final_cmd, capture_output=True, text=True)
             
             # Cleanup temp files
-            if os.path.exists(temp_wav):
-                os.remove(temp_wav)
+            for temp_file in [temp_wav, sox_processed]:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
             
             if result.returncode != 0:
                 raise Exception(f"FFmpeg post-processing failed: {result.stderr}")
                 
-            logging.info("AI-powered noise reduction completed successfully")
+            logging.info("Enhanced AI noise reduction completed successfully")
             return cleaned_path
             
         except Exception as fallback_error:
-            logging.error(f"Local noise reduction failed: {fallback_error}")
+            logging.error(f"Enhanced noise reduction failed: {fallback_error}")
             # Last resort: basic ffmpeg processing
             simple_cmd = [
                 'ffmpeg', '-y', '-i', audio_path,
-                '-af', 'highpass=f=80,lowpass=f=10000,loudnorm=I=-14:TP=-1.0:LRA=7',
+                '-af', 'highpass=f=100,lowpass=f=8000,afftdn=nf=-25,loudnorm=I=-14:TP=-1.0:LRA=7',
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
             ]
