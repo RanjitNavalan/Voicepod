@@ -242,30 +242,31 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
     }
 
 async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
-    """Apply ElevenLabs voice regeneration - MOCKED for demo"""
-    # For demo purposes, we'll simulate voice regeneration
-    await asyncio.sleep(2)
-    
-    # Simply copy the file
-    revoiced_path = audio_path.replace('.', '_revoiced.')
-    shutil.copy(audio_path, revoiced_path)
-    
-    return revoiced_path
-    
-    # ACTUAL ELEVENLABS IMPLEMENTATION (commented out for demo):
-    # voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
-    # audio_generator = elevenlabs_client.text_to_speech.convert(
-    #     text=transcript,
-    #     voice_id=voice_id,
-    #     model_id="eleven_multilingual_v2"
-    # )
-    # audio_data = b""
-    # for chunk in audio_generator:
-    #     audio_data += chunk
-    # revoiced_path = audio_path.replace('.', '_revoiced.')
-    # with open(revoiced_path, 'wb') as f:
-    #     f.write(audio_data)
-    # return revoiced_path
+    """Apply ElevenLabs voice regeneration"""
+    try:
+        voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+        
+        audio_generator = elevenlabs_client.text_to_speech.convert(
+            text=transcript,
+            voice_id=voice_id,
+            model_id="eleven_multilingual_v2"
+        )
+        
+        # Save audio
+        audio_data = b""
+        for chunk in audio_generator:
+            audio_data += chunk
+        
+        revoiced_path = audio_path.replace(Path(audio_path).suffix, '_revoiced.mp3')
+        with open(revoiced_path, 'wb') as f:
+            f.write(audio_data)
+        
+        return revoiced_path
+        
+    except Exception as e:
+        logging.warning(f"ElevenLabs failed: {e}. Skipping re-voicing.")
+        # Fallback: return original
+        return audio_path
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
     """Merge audio with background music using ffmpeg"""
