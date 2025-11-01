@@ -830,10 +830,13 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
         logging.info("Filler removal skipped to preserve audio length")
         
         # Step 4: Optional ElevenLabs re-voicing
+        logging.info(f"Checking preset for AI narrator: preset={preset_name}, use_elevenlabs={preset.use_elevenlabs}")
         if preset.use_elevenlabs:
+            logging.info("AI NARRATOR ENABLED - Starting ElevenLabs re-voicing...")
             update_job_progress(job_id, 60, "Applying AI narrator voice...")
             current_audio = await apply_elevenlabs_revoice(current_audio, analysis['transcript'])
         else:
+            logging.info(f"AI NARRATOR DISABLED for preset '{preset_name}' - Using original voice")
             update_job_progress(job_id, 60, "Skipping AI re-voicing...")
         
         # Step 5: Professional music with smart ducking
