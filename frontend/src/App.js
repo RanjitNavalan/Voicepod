@@ -50,7 +50,7 @@ const Home = () => {
     const pollStatus = async () => {
       try {
         const response = await axios.get(`${API}/status/${jobId}`);
-        const { status, progress: prog, current_step, download_url, error } = response.data;
+        const { status, progress: prog, current_step, download_url, error, statistics } = response.data;
 
         setProgress(prog);
         setCurrentStep(current_step);
@@ -58,6 +58,10 @@ const Home = () => {
         if (status === "completed") {
           setProcessing(false);
           setDownloadUrl(download_url);
+          // Extract transcript from statistics
+          if (statistics && statistics.transcript) {
+            setTranscript(statistics.transcript);
+          }
           toast.success("Voicepod is ready! 🎉");
         } else if (status === "failed") {
           setProcessing(false);
