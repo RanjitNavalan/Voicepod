@@ -270,7 +270,7 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
 
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
     """Merge audio with background music using ffmpeg"""
-    output_path = audio_path.replace('.', '_final.')
+    output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
     
     # For demo: Just normalize and convert to MP3 (without actual music)
     # In production, you would mix with actual background music files
@@ -278,7 +278,7 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         'ffmpeg', '-y',
         '-i', audio_path,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # Loudness normalization
-        '-c:a', 'libmp3lame', '-b:a', '192k',
+        '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
         output_path
     ]
     
@@ -287,7 +287,7 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
 
 def add_metadata(audio_path: str, title: str) -> str:
     """Add ID3 tags to audio"""
-    output_path = audio_path.replace('_final.', '_complete.')
+    output_path = audio_path.replace('_final.mp3', '_complete.mp3')
     
     cmd = [
         'ffmpeg', '-y',
@@ -295,7 +295,7 @@ def add_metadata(audio_path: str, title: str) -> str:
         '-metadata', f'title={title}',
         '-metadata', 'artist=Voicepod Studio',
         '-metadata', 'album=AI-Enhanced Audio',
-        '-c', 'copy',  # Copy codec without re-encoding
+        '-c:a', 'copy',  # Copy codec without re-encoding
         output_path
     ]
     
