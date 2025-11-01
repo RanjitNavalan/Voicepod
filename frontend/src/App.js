@@ -150,6 +150,8 @@ const Home = () => {
       setProcessing(true);
       setProgress(0);
       setDownloadUrl(null);
+      setTranscript("");
+      setShowTranscript(false);
       
       const response = await axios.post(`${API}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
