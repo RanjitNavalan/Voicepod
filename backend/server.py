@@ -177,7 +177,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         torchaudio.save(vocals_wav, vocals.cpu(), model.samplerate)
         
         # Apply noise reduction on vocals for extra clarity
-        logging.info("Applying moderate noise reduction to vocals...")
+        logging.info("Applying AGGRESSIVE noise reduction for clean vocals...")
         try:
             import noisereduce as nr
             import librosa
@@ -185,19 +185,32 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             audio_data, sample_rate = librosa.load(vocals_wav, sr=None, mono=False)
             
-            # Moderate noise reduction to handle recording background noise
-            reduced_noise = nr.reduce_noise(
+            # AGGRESSIVE noise reduction for recordings with background noise
+            # Two-pass approach for better results
+            # First pass: Heavy stationary noise removal
+            reduced_noise_pass1 = nr.reduce_noise(
                 y=audio_data,
                 sr=sample_rate,
                 stationary=True,
-                prop_decrease=0.6,  # 60% reduction for better noise removal
+                prop_decrease=0.8,  # 80% reduction - very aggressive
+                freq_mask_smooth_hz=800,
+                time_mask_smooth_ms=100
+            )
+            
+            # Second pass: Non-stationary noise (for recordings)
+            reduced_noise_pass2 = nr.reduce_noise(
+                y=reduced_noise_pass1,
+                sr=sample_rate,
+                stationary=False,  # Remove non-stationary noise (background chatter, etc.)
+                prop_decrease=0.6,  # 60% additional reduction
                 freq_mask_smooth_hz=500,
                 time_mask_smooth_ms=50
             )
             
             enhanced_wav = vocals_wav.replace('_vocals.wav', '_enhanced.wav')
-            sf.write(enhanced_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
+            sf.write(enhanced_wav, reduced_noise_pass2.T if len(reduced_noise_pass2.shape) > 1 else reduced_noise_pass2, sample_rate)
             final_input = enhanced_wav
+            logging.info("Two-pass noise reduction completed successfully")
         except Exception as nr_error:
             logging.warning(f"Light noise reduction failed: {nr_error}, using Demucs vocals directly")
             final_input = vocals_wav
