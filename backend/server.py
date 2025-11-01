@@ -293,10 +293,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
                 'lowpass=f=10000,'
                 'adeclick=w=5:t=2,'  # Click removal
                 'adeclip,'  # Declip
-                # Reduced silence removal - only remove very long pauses (1+ seconds)
-                'silenceremove=start_periods=1:start_duration=1.0:start_threshold=-50dB:'
-                'stop_periods=-1:stop_duration=1.0:stop_threshold=-50dB,'
-                # No loudnorm - will be applied once at the end
+                # NO silence removal - preserve complete audio
                 'acompressor=threshold=-18dB:ratio=3:attack=5:release=50',
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
