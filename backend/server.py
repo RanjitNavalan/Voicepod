@@ -615,20 +615,27 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
         logging.info(f"Voice duration: {voice_duration}s")
         
         # SIMPLIFIED FILTER: Reliable ducking without complex sidechain
+        # Ensure minimum 30 seconds output by looping music if needed
+        target_duration = max(30.0, voice_duration)  # Minimum 30 seconds
+        
         filter_complex = (
             # === VOICE PROCESSING ===
             '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice];'
             
             # === MUSIC PROCESSING ===
-            # Trim music to voice length + add fades
-            f'[1:a]atrim=0:{voice_duration},'
+            # Loop music to ensure at least target duration, trim to exact length
+            f'[1:a]aloop=loop=-1:size=2e+09,'  # Loop music indefinitely
+            f'atrim=0:{target_duration},'  # Trim to target duration
             'aformat=sample_rates=48000:channel_layouts=stereo,'
             'volume=0.15,'  # Base music volume (15%)
             'afade=t=in:st=0:d=3,'  # Smooth 3s fade in
-            f'afade=t=out:st={max(0, voice_duration-4)}:d=4[music];'  # Smooth 4s fade out
+            f'afade=t=out:st={max(0, target_duration-4)}:d=4[music];'  # Smooth 4s fade out
             
-            # === MIX VOICE + MUSIC ===
-            '[voice][music]amix=inputs=2:duration=first:weights=1.0 0.4[voice_music];'
+            # === PAD VOICE TO MATCH MUSIC DURATION ===
+            f'[voice]apad=whole_dur={target_duration}[voice_padded];'
+            
+            # === MIX VOICE + MUSIC (use longest to preserve full audio) ===
+            '[voice_padded][music]amix=inputs=2:duration=longest:weights=1.0 0.4[voice_music];'
         )
         
         # Add intro/outro if they exist
