@@ -267,7 +267,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
                     
                     final_cmd = [
                         'ffmpeg', '-y', '-i', enhanced_wav,
-                        '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
+                        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # -16 LUFS target
                         '-c:a', 'libmp3lame', '-b:a', '192k',
                         cleaned_path
                     ]
