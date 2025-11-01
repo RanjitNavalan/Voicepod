@@ -343,27 +343,31 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
         transcript = response.text if hasattr(response, 'text') else str(response)
         segments = response.segments if hasattr(response, 'segments') else []
     
-    # Detect filler words from transcript (simpler approach)
-    filler_words = ['um', 'uh', 'like', 'you know', 'so', 'actually', 'basically', 'literally']
+    # Detect filler words from transcript (CONSERVATIVE approach)
+    # Only target obvious fillers like "um" and "uh", not common words like "so", "like"
+    filler_words = ['um', 'uh']  # Much more conservative - only clear filler sounds
     filler_timestamps = []
     
     # Try to detect fillers from segments
     if segments:
         for segment in segments:
             if isinstance(segment, dict):
-                text = segment.get('text', '').lower()
+                text = segment.get('text', '').lower().strip()
                 start = segment.get('start', 0)
                 end = segment.get('end', 0)
             else:
-                text = (segment.text if hasattr(segment, 'text') else '').lower()
+                text = (segment.text if hasattr(segment, 'text') else '').lower().strip()
                 start = segment.start if hasattr(segment, 'start') else 0
                 end = segment.end if hasattr(segment, 'end') else 0
             
-            # Check if segment contains filler words
-            for filler in filler_words:
-                if filler in text:
-                    filler_timestamps.append((start, end))
-                    break
+            # Only remove segments that are PURELY filler words (not mixed content)
+            # This prevents removing entire sentences that happen to contain "so" or "like"
+            words_in_segment = text.split()
+            if len(words_in_segment) <= 2:  # Only short segments
+                for filler in filler_words:
+                    if filler in words_in_segment:
+                        filler_timestamps.append((start, end))
+                        break
     
     # Simple emotion peak detection
     emotion_peaks = []
