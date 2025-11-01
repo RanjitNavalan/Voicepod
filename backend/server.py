@@ -501,6 +501,75 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         # Fallback: return original
         return audio_path
 
+def add_emotion_sfx(audio_path: str, emotion_peaks: List[float]) -> str:
+    """Add subtle SFX at emotion peaks (NEW - doesn't modify existing audio)"""
+    if not emotion_peaks or len(emotion_peaks) == 0:
+        logging.info("No emotion peaks detected, skipping SFX")
+        return audio_path
+    
+    output_path = audio_path.replace(Path(audio_path).suffix, '_with_sfx.mp3')
+    
+    try:
+        # Select SFX based on position (variety)
+        sfx_files = [
+            MUSIC_DIR / 'sfx' / 'drumroll.mp3',  # Anticipation
+            MUSIC_DIR / 'sfx' / 'shatter.mp3',   # Impact
+        ]
+        
+        # Only use first 2 peaks (as per requirements)
+        peaks_to_use = emotion_peaks[:2]
+        
+        logging.info(f"Adding SFX at {len(peaks_to_use)} emotion peaks")
+        
+        # Build filter to overlay SFX at specific timestamps
+        filter_parts = ['[0:a]aformat=sample_rates=48000[main];']
+        
+        for i, peak_time in enumerate(peaks_to_use):
+            sfx_file = sfx_files[i % len(sfx_files)]
+            if not sfx_file.exists():
+                continue
+            
+            # Delay SFX to peak time, reduce volume to be subtle
+            filter_parts.append(
+                f'[{i+1}:a]adelay={int(peak_time * 1000)}|{int(peak_time * 1000)},'
+                f'volume=0.15[sfx{i}];'  # Very subtle - 15% volume
+            )
+        
+        # Mix all together
+        mix_inputs = ['[main]'] + [f'[sfx{i}]' for i in range(len(peaks_to_use))]
+        filter_parts.append(
+            f'{" ".join(mix_inputs)}amix=inputs={len(mix_inputs)}:'
+            f'duration=first:dropout_transition=2'
+        )
+        
+        filter_complex = ''.join(filter_parts)
+        
+        # Build command with main audio + SFX files
+        cmd = ['ffmpeg', '-y', '-i', audio_path]
+        for i, peak_time in enumerate(peaks_to_use):
+            sfx_file = sfx_files[i % len(sfx_files)]
+            if sfx_file.exists():
+                cmd.extend(['-i', str(sfx_file)])
+        
+        cmd.extend([
+            '-filter_complex', filter_complex,
+            '-c:a', 'libmp3lame', '-b:a', '192k',
+            output_path
+        ])
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logging.warning(f"SFX addition failed: {result.stderr[:200]}")
+            return audio_path  # Return original if SFX fails
+        
+        logging.info(f"Successfully added SFX at {len(peaks_to_use)} emotion peaks")
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Emotion SFX failed: {e}")
+        return audio_path  # Always return original on failure
+
 def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float]) -> str:
     """Add professional background music with smart ducking and intro/outro"""
     output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
