@@ -107,111 +107,138 @@ user_problem_statement: "Complete Phase 1 testing: (1) Test newly integrated SFX
 backend:
   - task: "Audio Upload and File Validation"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Upload endpoint accepts MP3/WAV/M4A files. Needs testing with various file formats and sizes."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Upload endpoint working correctly. Successfully uploaded WAV test file, received job_id, processing started immediately. File validation working for supported formats."
   
   - task: "Whisper Transcription and Emotion Peak Detection"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Uses OpenAI Whisper via emergentintegrations for transcription and emotion analysis. Returns transcript and emotion_peaks array."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Whisper transcription working. Successfully detected 1-2 emotion peaks in test audio. Transcript generated correctly. EMERGENT_LLM_KEY integration functional."
   
   - task: "Demucs Vocal Separation"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Uses Demucs htdemucs model for vocal separation. Previous user feedback indicated Demucs output was being degraded by subsequent processing. Simplified post-processing to preserve quality."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Demucs vocal separation working well. Clean vocal extraction observed, processing time ~15 seconds for 10s audio. Quality preserved through pipeline. No degradation issues detected."
   
   - task: "Audio Cleanup (Noise Reduction, De-reverb, Breath/Click Attenuation)"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Uses noisereduce + ffmpeg filters: highpass, lowpass, adeclick, adeclip, afftdn for noise reduction, de-reverb, breath and click attenuation. Need to verify effectiveness and audio quality."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Audio cleanup working. Demucs + noisereduce pipeline producing clean audio output. Filters applied successfully without artifacts. Audio quality maintained."
   
   - task: "Loudness Normalization to -16 LUFS"
     implemented: true
-    working: "NA"
+    working: false
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Multiple loudnorm filters set to I=-16:TP=-1.5:LRA=11. Previous test result was -14.28 LUFS. Need to measure actual LUFS output and verify it hits -16 LUFS target precisely."
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL: LUFS normalization not achieving -16 target. Measured -18.06 LUFS (2.06 dB off target) and -inf LUFS in some cases. Multiple loudnorm filters may be conflicting or filler word removal creating too-short audio segments affecting normalization."
   
   - task: "Background Music Integration with Ducking"
     implemented: true
-    working: "NA"
+    working: false
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "merge_with_music function adds background music (ambient/cinematic) with dynamic ducking under speech and fade-in/out. Music files available in /app/backend/music/ambient and /app/backend/music/cinematic."
+      - working: false
+        agent: "testing"
+        comment: "❌ ISSUE: Background music merge occasionally failing. Observed 'Music merge failed' error in logs, falling back to voice-only output. Music files exist but ffmpeg command failing intermittently."
   
   - task: "SFX at Emotion Peaks (NEW)"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "add_emotion_sfx function adds subtle SFX (drumroll.mp3, shatter.mp3) at first 2 emotion peaks detected by Whisper. SFX mixed at 15% volume. SFX files available: drumroll.mp3, ohno.mp3, shatter.mp3, snore.mp3, tiktik.mp3. CRITICAL: Must verify SFX are audible but subtle, properly timed with emotion peaks, and don't degrade overall audio quality."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: SFX at emotion peaks working correctly! Successfully added SFX at 2 emotion peaks. SFX files (drumroll.mp3, shatter.mp3) exist and are being mixed at 15% volume. Timing appears correct with detected emotion peaks."
   
   - task: "MP3/M4A Export with Metadata"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "add_metadata function embeds cover art and title into MP3/M4A. 192 kbps bitrate."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Metadata embedding working after bug fix. Fixed file path issue in add_metadata function. Cover art and title successfully embedded. Verified with ffprobe: TAG:title=Voicepod_[job_id]."
   
   - task: "Three Presets: Podcast Calm, Dramatic, AI Narrator"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Three presets implemented with different music types and configurations."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: All three presets available via /api/presets endpoint. Successfully tested 'podcast_calm' preset. Presets have different music types (ambient/cinematic) and configurations."
 
 metadata:
   created_by: "main_agent"
