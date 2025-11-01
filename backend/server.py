@@ -136,98 +136,159 @@ def update_job_progress(job_id: str, progress: int, step: str, status: str = "pr
         })
 
 async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
-    """Process audio with Lightning AI noise removal API"""
+    """Process audio with Demucs for high-quality vocal extraction and enhancement"""
     cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
     
     try:
-        # Use Lightning AI API for noise removal
-        logging.info("Using Lightning AI API for noise removal...")
+        # Use Demucs for vocal separation and enhancement
+        logging.info("Using Demucs for high-quality vocal extraction...")
         
-        # Lightning AI API endpoint (using the ID provided by user)
-        LIGHTNING_AI_ID = "9b2560a5-efb2-4748-a0f0-98f525fd63bd"
-        api_url = f"https://lightning.ai/lightning-ai/api/{LIGHTNING_AI_ID}"
+        import torch
+        from demucs.pretrained import get_model
+        from demucs.apply import apply_model
+        import torchaudio
         
-        # Convert to WAV format (16kHz mono) for Lightning AI
+        # Load Demucs model (htdemucs is the best for vocals)
+        model = get_model('htdemucs')
+        model.eval()
+        
+        # Convert to WAV for Demucs
         temp_wav = audio_path.replace(Path(audio_path).suffix, '_temp.wav')
-        convert_cmd = ['ffmpeg', '-y', '-i', audio_path, '-ar', '16000', '-ac', '1', temp_wav]
+        convert_cmd = ['ffmpeg', '-y', '-i', audio_path, '-ar', '44100', '-ac', '2', temp_wav]
         subprocess.run(convert_cmd, check=True, capture_output=True)
         
-        # Call Lightning AI API
-        with open(temp_wav, 'rb') as f:
-            files = {'audio': f}
-            response = requests.post(
-                api_url,
-                files=files,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                # Save enhanced audio
-                enhanced_wav = temp_wav.replace('_temp.wav', '_enhanced.wav')
-                with open(enhanced_wav, 'wb') as ef:
-                    ef.write(response.content)
-                
-                # Convert to MP3 with normalization
-                final_cmd = [
-                    'ffmpeg', '-y', '-i', enhanced_wav,
-                    '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
-                    '-c:a', 'libmp3lame', '-b:a', '192k',
-                    cleaned_path
-                ]
-                subprocess.run(final_cmd, check=True, capture_output=True)
-                
-                # Cleanup
-                for temp_file in [temp_wav, enhanced_wav]:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
-                
-                logging.info("Lightning AI noise removal completed successfully")
-                return cleaned_path
-            else:
-                raise Exception(f"Lightning AI API returned {response.status_code}: {response.text}")
+        # Load audio
+        wav, sr = torchaudio.load(temp_wav)
         
-    except Exception as e:
-        logging.warning(f"Lightning AI API failed: {e}. Using fallback AI noise reduction.")
+        # Ensure correct sample rate
+        if sr != model.samplerate:
+            wav = torchaudio.functional.resample(wav, sr, model.samplerate)
         
-        # Fallback: Use noisereduce + SOX
+        # Apply Demucs to separate vocals
+        logging.info("Separating vocals with Demucs (this may take a moment)...")
+        with torch.no_grad():
+            sources = apply_model(model, wav[None], device='cpu')[0]
+        
+        # Extract vocals (index 3 in htdemucs: drums, bass, other, vocals)
+        vocals = sources[3]  # Just the vocals, no background noise
+        
+        # Save vocals
+        vocals_wav = temp_wav.replace('_temp.wav', '_vocals.wav')
+        torchaudio.save(vocals_wav, vocals.cpu(), model.samplerate)
+        
+        # Apply noise reduction on vocals for extra clarity
+        logging.info("Applying additional noise reduction to vocals...")
         try:
             import noisereduce as nr
             import librosa
             import soundfile as sf
             
-            logging.info("Using noisereduce + SOX fallback...")
+            audio_data, sample_rate = librosa.load(vocals_wav, sr=None, mono=False)
+            
+            # Light noise reduction (since Demucs already cleaned it)
+            reduced_noise = nr.reduce_noise(
+                y=audio_data,
+                sr=sample_rate,
+                stationary=True,
+                prop_decrease=0.5,  # Lighter reduction since vocals are already clean
+                freq_mask_smooth_hz=500,
+                time_mask_smooth_ms=50
+            )
+            
+            enhanced_wav = vocals_wav.replace('_vocals.wav', '_enhanced.wav')
+            sf.write(enhanced_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
+            final_input = enhanced_wav
+        except Exception as nr_error:
+            logging.warning(f"Additional noise reduction failed: {nr_error}, using Demucs vocals directly")
+            final_input = vocals_wav
+        
+        # Convert to MP3 with normalization and enhancement
+        final_cmd = [
+            'ffmpeg', '-y', '-i', final_input,
+            '-af', 
+            'highpass=f=80,'  # Remove very low frequencies
+            'lowpass=f=10000,'  # Keep speech frequencies
+            'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
+            'stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB,'  # Remove silence
+            'loudnorm=I=-14:TP=-1.0:LRA=7,'  # Normalize
+            'acompressor=threshold=-20dB:ratio=4:attack=5:release=50',  # Light compression
+            '-c:a', 'libmp3lame', '-b:a', '192k',
+            cleaned_path
+        ]
+        subprocess.run(final_cmd, check=True, capture_output=True)
+        
+        # Cleanup
+        for temp_file in [temp_wav, vocals_wav, enhanced_wav]:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        
+        logging.info("Demucs vocal extraction completed successfully")
+        return cleaned_path
+        
+    except Exception as e:
+        logging.warning(f"Demucs processing failed: {e}. Trying Lightning AI fallback...")
+        
+        # Fallback 1: Lightning AI API
+        try:
+            LIGHTNING_AI_ID = "9b2560a5-efb2-4748-a0f0-98f525fd63bd"
+            api_url = f"https://lightning.ai/lightning-ai/api/{LIGHTNING_AI_ID}"
+            
+            temp_wav = audio_path.replace(Path(audio_path).suffix, '_temp.wav')
+            convert_cmd = ['ffmpeg', '-y', '-i', audio_path, '-ar', '16000', '-ac', '1', temp_wav]
+            subprocess.run(convert_cmd, check=True, capture_output=True)
+            
+            with open(temp_wav, 'rb') as f:
+                response = requests.post(api_url, files={'audio': f}, timeout=60)
+                
+                if response.status_code == 200:
+                    enhanced_wav = temp_wav.replace('_temp.wav', '_enhanced.wav')
+                    with open(enhanced_wav, 'wb') as ef:
+                        ef.write(response.content)
+                    
+                    final_cmd = [
+                        'ffmpeg', '-y', '-i', enhanced_wav,
+                        '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
+                        '-c:a', 'libmp3lame', '-b:a', '192k',
+                        cleaned_path
+                    ]
+                    subprocess.run(final_cmd, check=True, capture_output=True)
+                    
+                    for temp_file in [temp_wav, enhanced_wav]:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                    
+                    logging.info("Lightning AI processing completed")
+                    return cleaned_path
+        except Exception as lightning_error:
+            logging.warning(f"Lightning AI also failed: {lightning_error}. Using noisereduce fallback...")
+        
+        # Fallback 2: noisereduce + SOX
+        try:
+            import noisereduce as nr
+            import librosa
+            import soundfile as sf
+            
             audio_data, sample_rate = librosa.load(audio_path, sr=None, mono=False)
             
-            # Apply aggressive noise reduction
             reduced_noise = nr.reduce_noise(
-                y=audio_data, 
+                y=audio_data,
                 sr=sample_rate,
                 stationary=True,
                 prop_decrease=0.9,
                 freq_mask_smooth_hz=1000,
-                time_mask_smooth_ms=100,
-                n_std_thresh_stationary=1.5,
-                use_torch=False
+                time_mask_smooth_ms=100
             )
             
-            # Save to WAV
             temp_wav = cleaned_path.replace('.mp3', '_temp.wav')
             sf.write(temp_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
             
-            # SOX processing
             sox_processed = temp_wav.replace('_temp.wav', '_sox.wav')
-            sox_cmd = [
-                'sox', temp_wav, sox_processed,
-                'highpass', '100',
-                'lowpass', '8000',
-                'compand', '0.3,1', '6:-70,-60,-20', '-5', '-90', '0.2',
-                'norm', '-3'
-            ]
+            sox_cmd = ['sox', temp_wav, sox_processed, 'highpass', '100', 'lowpass', '8000', 
+                      'compand', '0.3,1', '6:-70,-60,-20', '-5', '-90', '0.2', 'norm', '-3']
             sox_result = subprocess.run(sox_cmd, capture_output=True, text=True)
             
             final_input = sox_processed if sox_result.returncode == 0 else temp_wav
             
-            # Final processing
             final_cmd = [
                 'ffmpeg', '-y', '-i', final_input,
                 '-af', 'silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB:'
@@ -238,7 +299,6 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             ]
             subprocess.run(final_cmd, check=True, capture_output=True)
             
-            # Cleanup
             for temp_file in [temp_wav, sox_processed]:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
@@ -246,9 +306,8 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             logging.info("Fallback noise reduction completed")
             return cleaned_path
             
-        except Exception as fallback_error:
-            logging.error(f"All methods failed: {fallback_error}")
-            # Last resort
+        except Exception as final_error:
+            logging.error(f"All methods failed: {final_error}")
             simple_cmd = [
                 'ffmpeg', '-y', '-i', audio_path,
                 '-af', 'highpass=f=100,lowpass=f=8000,afftdn=nf=-25,loudnorm=I=-14:TP=-1.0:LRA=7',
