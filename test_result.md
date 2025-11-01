@@ -101,3 +101,134 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Complete Phase 1 testing: (1) Test newly integrated SFX at emotion peaks, (2) Fine-tune loudness normalization to -16 LUFS (previously was -14.28 LUFS), (3) Verify de-reverb, breath attenuation, click removal effectiveness"
+
+backend:
+  - task: "Audio Upload and File Validation"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Upload endpoint accepts MP3/WAV/M4A files. Needs testing with various file formats and sizes."
+  
+  - task: "Whisper Transcription and Emotion Peak Detection"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Uses OpenAI Whisper via emergentintegrations for transcription and emotion analysis. Returns transcript and emotion_peaks array."
+  
+  - task: "Demucs Vocal Separation"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Uses Demucs htdemucs model for vocal separation. Previous user feedback indicated Demucs output was being degraded by subsequent processing. Simplified post-processing to preserve quality."
+  
+  - task: "Audio Cleanup (Noise Reduction, De-reverb, Breath/Click Attenuation)"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Uses noisereduce + ffmpeg filters: highpass, lowpass, adeclick, adeclip, afftdn for noise reduction, de-reverb, breath and click attenuation. Need to verify effectiveness and audio quality."
+  
+  - task: "Loudness Normalization to -16 LUFS"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Multiple loudnorm filters set to I=-16:TP=-1.5:LRA=11. Previous test result was -14.28 LUFS. Need to measure actual LUFS output and verify it hits -16 LUFS target precisely."
+  
+  - task: "Background Music Integration with Ducking"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "merge_with_music function adds background music (ambient/cinematic) with dynamic ducking under speech and fade-in/out. Music files available in /app/backend/music/ambient and /app/backend/music/cinematic."
+  
+  - task: "SFX at Emotion Peaks (NEW)"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "add_emotion_sfx function adds subtle SFX (drumroll.mp3, shatter.mp3) at first 2 emotion peaks detected by Whisper. SFX mixed at 15% volume. SFX files available: drumroll.mp3, ohno.mp3, shatter.mp3, snore.mp3, tiktik.mp3. CRITICAL: Must verify SFX are audible but subtle, properly timed with emotion peaks, and don't degrade overall audio quality."
+  
+  - task: "MP3/M4A Export with Metadata"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "add_metadata function embeds cover art and title into MP3/M4A. 192 kbps bitrate."
+  
+  - task: "Three Presets: Podcast Calm, Dramatic, AI Narrator"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Three presets implemented with different music types and configurations."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "SFX at Emotion Peaks (NEW)"
+    - "Loudness Normalization to -16 LUFS"
+    - "Audio Cleanup (Noise Reduction, De-reverb, Breath/Click Attenuation)"
+    - "Demucs Vocal Separation"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Phase 1 testing initiated. Priority: (1) Verify SFX at emotion peaks are working correctly and audible but subtle, (2) Measure actual LUFS output and confirm -16 LUFS target is achieved, (3) Verify audio cleanup filters (de-reverb, breath/click attenuation) are effective without degrading quality. All backend endpoints should be tested end-to-end with a sample audio file. Use 'Podcast Calm' preset for initial testing."
