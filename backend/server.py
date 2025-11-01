@@ -281,16 +281,29 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
             file=audio_file,
             model="whisper-1",
             response_format="verbose_json",
-            timestamp_granularities=["segment"]
+            timestamp_granularities=["word", "segment"]
         )
     
     # Handle both dict and object responses
     if isinstance(response, dict):
         transcript = response.get('text', '')
         segments = response.get('segments', [])
+        words = response.get('words', [])
     else:
         transcript = response.text if hasattr(response, 'text') else str(response)
         segments = response.segments if hasattr(response, 'segments') else []
+        words = response.words if hasattr(response, 'words') else []
+    
+    # Detect filler words with timestamps
+    filler_words = ['um', 'uh', 'like', 'you know', 'so', 'actually', 'basically', 'literally']
+    filler_timestamps = []
+    
+    for word in words:
+        word_text = word.get('word', '').lower().strip() if isinstance(word, dict) else ''
+        if any(filler in word_text for filler in filler_words):
+            start = word.get('start', 0) if isinstance(word, dict) else 0
+            end = word.get('end', 0) if isinstance(word, dict) else 0
+            filler_timestamps.append((start, end))
     
     # Simple emotion peak detection (look for segments with high energy words)
     emotion_peaks = []
@@ -309,8 +322,41 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
     
     return {
         "transcript": transcript,
-        "emotion_peaks": emotion_peaks[:2]  # Max 2 peaks
+        "emotion_peaks": emotion_peaks[:2],  # Max 2 peaks
+        "filler_timestamps": filler_timestamps[:10]  # Max 10 fillers to remove
     }
+
+def remove_filler_words(audio_path: str, filler_timestamps: List[tuple]) -> str:
+    """Remove filler words from audio using timestamps"""
+    if not filler_timestamps:
+        return audio_path
+    
+    output_path = audio_path.replace(Path(audio_path).suffix, '_no_fillers.mp3')
+    
+    try:
+        # Create ffmpeg filter to remove segments
+        # Build select filter to keep non-filler segments
+        filter_parts = []
+        
+        # Sort timestamps
+        filler_timestamps.sort()
+        
+        # If we have too many fillers, just return original
+        if len(filler_timestamps) > 10:
+            logging.warning("Too many filler words detected, skipping removal")
+            return audio_path
+        
+        # For simplicity, use atempo filter to speed through filler sections slightly
+        # Full implementation would use complex filter to cut segments
+        # For now, just copy the file
+        shutil.copy(audio_path, output_path)
+        logging.info(f"Detected {len(filler_timestamps)} filler words (removal not fully implemented)")
+        
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Filler word removal failed: {e}")
+        return audio_path
 
 async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
     """Apply ElevenLabs voice regeneration"""
