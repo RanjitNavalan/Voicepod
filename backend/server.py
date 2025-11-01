@@ -680,7 +680,15 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
 def add_metadata(audio_path: str, title: str, format: str = 'mp3') -> str:
     """Add ID3 tags and cover image to audio"""
     ext = '.m4a' if format == 'm4a' else '.mp3'
-    output_path = audio_path.replace('_final.mp3', f'_complete{ext}')
+    # Handle different possible file endings
+    if '_with_sfx.mp3' in audio_path:
+        output_path = audio_path.replace('_with_sfx.mp3', f'_complete{ext}')
+    elif '_final.mp3' in audio_path:
+        output_path = audio_path.replace('_final.mp3', f'_complete{ext}')
+    else:
+        # Fallback: add _complete before extension
+        base_path = audio_path.rsplit('.', 1)[0]
+        output_path = f"{base_path}_complete{ext}"
     cover_image = MUSIC_DIR / 'cover.jpg'
     
     try:
