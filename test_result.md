@@ -189,7 +189,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 1
     priority: "medium"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
@@ -197,6 +197,9 @@ backend:
       - working: false
         agent: "testing"
         comment: "❌ ISSUE: Background music merge occasionally failing. Observed 'Music merge failed' error in logs, falling back to voice-only output. Music files exist but ffmpeg command failing intermittently."
+      - working: false
+        agent: "main"
+        comment: "FIX APPLIED: Simplified filter_complex to use reliable amix with fixed weights instead of complex sidechaincompress. Replaced sidechaincompress with simple amix=inputs=2:weights=1.0 0.4. Added better error handling, logging, and timeout protection. Added validation for voice duration and ffmpeg errors. Needs retesting."
   
   - task: "SFX at Emotion Peaks (NEW)"
     implemented: true
