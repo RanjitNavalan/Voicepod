@@ -484,8 +484,14 @@ def remove_filler_words(audio_path: str, filler_timestamps: List[tuple]) -> str:
 async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
     """Apply ElevenLabs voice regeneration"""
     try:
+        logging.info("Starting ElevenLabs AI voice generation...")
         voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
         
+        if not transcript or len(transcript.strip()) < 10:
+            logging.warning(f"Transcript too short ({len(transcript)} chars), skipping ElevenLabs")
+            return audio_path
+        
+        logging.info(f"Generating AI voice for {len(transcript)} character transcript...")
         audio_generator = elevenlabs_client.text_to_speech.convert(
             text=transcript,
             voice_id=voice_id,
@@ -497,14 +503,19 @@ async def apply_elevenlabs_revoice(audio_path: str, transcript: str) -> str:
         for chunk in audio_generator:
             audio_data += chunk
         
+        if len(audio_data) < 1000:
+            logging.warning(f"ElevenLabs returned very short audio ({len(audio_data)} bytes)")
+            return audio_path
+        
         revoiced_path = audio_path.replace(Path(audio_path).suffix, '_revoiced.mp3')
         with open(revoiced_path, 'wb') as f:
             f.write(audio_data)
         
+        logging.info(f"ElevenLabs AI voice generated successfully ({len(audio_data)} bytes)")
         return revoiced_path
         
     except Exception as e:
-        logging.warning(f"ElevenLabs failed: {e}. Skipping re-voicing.")
+        logging.error(f"ElevenLabs failed: {e}. Skipping re-voicing.")
         # Fallback: return original
         return audio_path
 
