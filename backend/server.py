@@ -137,36 +137,27 @@ def update_job_progress(job_id: str, progress: int, step: str, status: str = "pr
 
 async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
     """Process audio with Cleanvoice API"""
-    # Upload file first
+    # Create edit job with file upload
     with open(audio_path, 'rb') as f:
-        files = {'file': f}
-        upload_response = requests.post(
-            "https://api.cleanvoice.ai/v2/files",
-            headers={"X-API-Key": cleanvoice_api_key},
-            files=files
-        )
-        upload_response.raise_for_status()
-        file_url = upload_response.json()['url']
-    
-    # Create edit job
-    payload = {
-        "input": {
-            "files": [file_url],
-            "config": config
+        files = {'file': (Path(audio_path).name, f, 'audio/mpeg')}
+        data = {
+            'config': json.dumps(config)
         }
-    }
-    
-    response = requests.post(
-        "https://api.cleanvoice.ai/v2/edits",
-        headers={"X-API-Key": cleanvoice_api_key},
-        json=payload
-    )
-    response.raise_for_status()
-    job_id = response.json()['task_id']
+        
+        response = requests.post(
+            "https://api.cleanvoice.ai/v2/edits",
+            headers={"X-API-Key": cleanvoice_api_key},
+            files=files,
+            data=data,
+            timeout=30
+        )
+        response.raise_for_status()
+        result = response.json()
+        job_id = result.get('task_id') or result.get('id')
     
     # Poll for completion
     for _ in range(60):  # 2 minutes max
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         status_response = requests.get(
             f"https://api.cleanvoice.ai/v2/edits/{job_id}",
             headers={"X-API-Key": cleanvoice_api_key}
