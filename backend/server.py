@@ -136,53 +136,72 @@ def update_job_progress(job_id: str, progress: int, step: str, status: str = "pr
         })
 
 async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
-    """Process audio with Cleanvoice API - MOCKED for demo"""
-    # For demo purposes, we'll simulate audio cleanup
-    # In production, this would call the actual Cleanvoice API
-    await asyncio.sleep(2)  # Simulate processing time
-    
-    # Simply copy the file as "cleaned" for demo
-    cleaned_path = audio_path.replace('.', '_cleaned.')
-    shutil.copy(audio_path, cleaned_path)
-    
-    return cleaned_path
-    
-    # ACTUAL CLEANVOICE IMPLEMENTATION (commented out for demo):
-    # with open(audio_path, 'rb') as f:
-    #     files = {'file': (Path(audio_path).name, f, 'audio/mpeg')}
-    #     data = {'config': json.dumps(config)}
-    #     
-    #     response = requests.post(
-    #         "https://api.cleanvoice.ai/v2/edits",
-    #         headers={"X-API-Key": cleanvoice_api_key},
-    #         files=files,
-    #         data=data,
-    #         timeout=30
-    #     )
-    #     response.raise_for_status()
-    #     result = response.json()
-    #     job_id = result.get('task_id') or result.get('id')
-    # 
-    # # Poll for completion
-    # for _ in range(60):
-    #     await asyncio.sleep(3)
-    #     status_response = requests.get(
-    #         f"https://api.cleanvoice.ai/v2/edits/{job_id}",
-    #         headers={"X-API-Key": cleanvoice_api_key}
-    #     )
-    #     status_data = status_response.json()
-    #     
-    #     if status_data['status'] == 'SUCCESS':
-    #         download_url = status_data['result']['download_url']
-    #         audio_response = requests.get(download_url)
-    #         cleaned_path = audio_path.replace('.', '_cleaned.')
-    #         with open(cleaned_path, 'wb') as f:
-    #             f.write(audio_response.content)
-    #         return cleaned_path
-    #     elif status_data['status'] == 'FAILURE':
-    #         raise Exception(f"Cleanvoice failed: {status_data.get('error')}")
-    # 
-    # raise Exception("Cleanvoice timeout")
+    """Process audio with Cleanvoice API"""
+    try:
+        # First convert audio to MP3 if needed
+        temp_mp3 = audio_path.replace(Path(audio_path).suffix, '_temp.mp3')
+        convert_cmd = ['ffmpeg', '-y', '-i', audio_path, '-c:a', 'libmp3lame', '-b:a', '192k', temp_mp3]
+        subprocess.run(convert_cmd, check=True, capture_output=True)
+        
+        # Upload to Cleanvoice
+        with open(temp_mp3, 'rb') as f:
+            files = {'file': (Path(temp_mp3).name, f, 'audio/mp3')}
+            data = {
+                'remove_filler_words': str(config.get('remove_filler_words', True)).lower(),
+                'remove_silence': str(config.get('remove_silence', True)).lower(),
+                'enhance_speech': str(config.get('enhance_speech', True)).lower(),
+                'studio_sound': config.get('studio_sound', 'true')
+            }
+            
+            response = requests.post(
+                "https://api.cleanvoice.ai/v2/edits",
+                headers={"X-API-Key": cleanvoice_api_key},
+                files=files,
+                data=data,
+                timeout=30
+            )
+            response.raise_for_status()
+            result = response.json()
+            job_id = result.get('task_id') or result.get('id')
+        
+        # Poll for completion
+        for _ in range(60):
+            await asyncio.sleep(3)
+            status_response = requests.get(
+                f"https://api.cleanvoice.ai/v2/edits/{job_id}",
+                headers={"X-API-Key": cleanvoice_api_key}
+            )
+            status_data = status_response.json()
+            
+            if status_data.get('status') == 'SUCCESS':
+                download_url = status_data['result']['download_url']
+                audio_response = requests.get(download_url)
+                cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
+                with open(cleaned_path, 'wb') as f:
+                    f.write(audio_response.content)
+                
+                # Clean up temp file
+                if os.path.exists(temp_mp3):
+                    os.remove(temp_mp3)
+                    
+                return cleaned_path
+            elif status_data.get('status') == 'FAILURE':
+                raise Exception(f"Cleanvoice failed: {status_data.get('error')}")
+        
+        raise Exception("Cleanvoice timeout")
+        
+    except Exception as e:
+        logging.warning(f"Cleanvoice failed: {e}. Falling back to basic processing.")
+        # Fallback: Just convert to normalized MP3
+        cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
+        fallback_cmd = [
+            'ffmpeg', '-y', '-i', audio_path,
+            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-c:a', 'libmp3lame', '-b:a', '192k',
+            cleaned_path
+        ]
+        subprocess.run(fallback_cmd, check=True, capture_output=True)
+        return cleaned_path
 
 async def transcribe_and_analyze(audio_path: str) -> Dict:
     """Transcribe audio and detect emotion peaks"""
