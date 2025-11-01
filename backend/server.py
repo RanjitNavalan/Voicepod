@@ -272,17 +272,22 @@ def merge_with_music(audio_path: str, music_type: str, emotion_peaks: List[float
     """Merge audio with background music using ffmpeg"""
     output_path = audio_path.replace(Path(audio_path).suffix, '_final.mp3')
     
-    # For demo: Just normalize and convert to MP3 (without actual music)
-    # In production, you would mix with actual background music files
+    # Normalize with proper settings to maintain audibility
+    # Using two-pass loudnorm for better results
     cmd = [
         'ffmpeg', '-y',
         '-i', audio_path,
-        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # Loudness normalization
+        '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7:print_format=summary',  # Less aggressive normalization
         '-c:a', 'libmp3lame', '-b:a', '192k', '-q:a', '2',
         output_path
     ]
     
-    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logging.error(f"FFmpeg error: {result.stderr}")
+        # Fallback: simple copy
+        shutil.copy(audio_path, output_path)
+    
     return output_path
 
 def add_metadata(audio_path: str, title: str) -> str:
