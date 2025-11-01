@@ -177,7 +177,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         torchaudio.save(vocals_wav, vocals.cpu(), model.samplerate)
         
         # Apply noise reduction on vocals for extra clarity
-        logging.info("Applying additional noise reduction to vocals...")
+        logging.info("Applying light noise reduction to vocals...")
         try:
             import noisereduce as nr
             import librosa
@@ -185,21 +185,21 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             audio_data, sample_rate = librosa.load(vocals_wav, sr=None, mono=False)
             
-            # Light noise reduction (since Demucs already cleaned it)
+            # VERY LIGHT noise reduction (Demucs already did the work)
             reduced_noise = nr.reduce_noise(
                 y=audio_data,
                 sr=sample_rate,
                 stationary=True,
-                prop_decrease=0.5,  # Lighter reduction since vocals are already clean
-                freq_mask_smooth_hz=500,
-                time_mask_smooth_ms=50
+                prop_decrease=0.3,  # Only 30% reduction - very light
+                freq_mask_smooth_hz=300,
+                time_mask_smooth_ms=30
             )
             
             enhanced_wav = vocals_wav.replace('_vocals.wav', '_enhanced.wav')
             sf.write(enhanced_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
             final_input = enhanced_wav
         except Exception as nr_error:
-            logging.warning(f"Additional noise reduction failed: {nr_error}, using Demucs vocals directly")
+            logging.warning(f"Light noise reduction failed: {nr_error}, using Demucs vocals directly")
             final_input = vocals_wav
         
         # Convert to MP3 with MINIMAL processing to preserve Demucs quality
