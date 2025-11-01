@@ -317,7 +317,8 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             logging.error(f"All methods failed: {final_error}")
             simple_cmd = [
                 'ffmpeg', '-y', '-i', audio_path,
-                '-af', 'highpass=f=100,lowpass=f=8000,adeclick,adeclip,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11',
+                # No loudnorm - will be applied once at the end
+                '-af', 'highpass=f=100,lowpass=f=8000,adeclick,adeclip,afftdn=nf=-25',
                 '-c:a', 'libmp3lame', '-b:a', '192k',
                 cleaned_path
             ]
