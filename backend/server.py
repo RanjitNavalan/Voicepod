@@ -389,7 +389,7 @@ async def transcribe_and_analyze(audio_path: str) -> Dict:
     return {
         "transcript": transcript,
         "emotion_peaks": emotion_peaks[:2] if emotion_peaks else [],
-        "filler_timestamps": filler_timestamps[:10] if filler_timestamps else []
+        "filler_timestamps": filler_timestamps[:3] if filler_timestamps else []  # Max 3 filler removals to preserve length
     }
 
 def remove_filler_words(audio_path: str, filler_timestamps: List[tuple]) -> str:
