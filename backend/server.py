@@ -136,63 +136,67 @@ def update_job_progress(job_id: str, progress: int, step: str, status: str = "pr
         })
 
 async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
-    """Process audio with Lightning AI noise removal"""
+    """Process audio with Lightning AI noise removal API"""
     cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
     
     try:
-        # Use Lightning AI / SpeechBrain for noise removal
-        logging.info("Using Lightning AI (SpeechBrain MTL-Mimic-Voicebank) for noise removal...")
+        # Use Lightning AI API for noise removal
+        logging.info("Using Lightning AI API for noise removal...")
         
-        from speechbrain.inference.enhancement import WaveformEnhancement
-        import torch
+        # Lightning AI API endpoint (using the ID provided by user)
+        LIGHTNING_AI_ID = "9b2560a5-efb2-4748-a0f0-98f525fd63bd"
+        api_url = f"https://lightning.ai/lightning-ai/api/{LIGHTNING_AI_ID}"
         
-        # Load Lightning AI's noise removal model
-        enhancer = WaveformEnhancement.from_hparams(
-            source="speechbrain/mtl-mimic-voicebank",
-            savedir="pretrained_models/mtl-mimic-voicebank",
-        )
-        
-        # Convert audio to WAV if needed (model requires WAV)
+        # Convert to WAV format (16kHz mono) for Lightning AI
         temp_wav = audio_path.replace(Path(audio_path).suffix, '_temp.wav')
         convert_cmd = ['ffmpeg', '-y', '-i', audio_path, '-ar', '16000', '-ac', '1', temp_wav]
         subprocess.run(convert_cmd, check=True, capture_output=True)
         
-        # Enhance audio with Lightning AI model
-        enhanced = enhancer.enhance_file(temp_wav)
-        
-        # Save enhanced audio
-        enhanced_wav = temp_wav.replace('_temp.wav', '_enhanced.wav')
-        import torchaudio
-        torchaudio.save(enhanced_wav, enhanced.cpu(), 16000)
-        
-        # Convert back to MP3 with normalization
-        final_cmd = [
-            'ffmpeg', '-y', '-i', enhanced_wav,
-            '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
-            '-c:a', 'libmp3lame', '-b:a', '192k',
-            cleaned_path
-        ]
-        subprocess.run(final_cmd, check=True, capture_output=True)
-        
-        # Cleanup temp files
-        for temp_file in [temp_wav, enhanced_wav]:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-        
-        logging.info("Lightning AI noise removal completed successfully")
-        return cleaned_path
+        # Call Lightning AI API
+        with open(temp_wav, 'rb') as f:
+            files = {'audio': f}
+            response = requests.post(
+                api_url,
+                files=files,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                # Save enhanced audio
+                enhanced_wav = temp_wav.replace('_temp.wav', '_enhanced.wav')
+                with open(enhanced_wav, 'wb') as ef:
+                    ef.write(response.content)
+                
+                # Convert to MP3 with normalization
+                final_cmd = [
+                    'ffmpeg', '-y', '-i', enhanced_wav,
+                    '-af', 'loudnorm=I=-14:TP=-1.0:LRA=7',
+                    '-c:a', 'libmp3lame', '-b:a', '192k',
+                    cleaned_path
+                ]
+                subprocess.run(final_cmd, check=True, capture_output=True)
+                
+                # Cleanup
+                for temp_file in [temp_wav, enhanced_wav]:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                
+                logging.info("Lightning AI noise removal completed successfully")
+                return cleaned_path
+            else:
+                raise Exception(f"Lightning AI API returned {response.status_code}: {response.text}")
         
     except Exception as e:
-        logging.warning(f"Lightning AI processing failed: {e}. Falling back to enhanced local noise reduction.")
-        # Fallback: Enhanced local noise reduction
+        logging.warning(f"Lightning AI API failed: {e}. Using fallback AI noise reduction.")
+        
+        # Fallback: Use noisereduce + SOX
         try:
             import noisereduce as nr
             import librosa
             import soundfile as sf
             
-            # Load audio
+            logging.info("Using noisereduce + SOX fallback...")
             audio_data, sample_rate = librosa.load(audio_path, sr=None, mono=False)
-            logging.info(f"Loaded audio: shape={audio_data.shape}, sr={sample_rate}")
             
             # Apply aggressive noise reduction
             reduced_noise = nr.reduce_noise(
@@ -206,11 +210,11 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
                 use_torch=False
             )
             
-            # Save to temporary WAV
+            # Save to WAV
             temp_wav = cleaned_path.replace('.mp3', '_temp.wav')
             sf.write(temp_wav, reduced_noise.T if len(reduced_noise.shape) > 1 else reduced_noise, sample_rate)
             
-            # Use SOX for additional processing
+            # SOX processing
             sox_processed = temp_wav.replace('_temp.wav', '_sox.wav')
             sox_cmd = [
                 'sox', temp_wav, sox_processed,
@@ -243,8 +247,8 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             return cleaned_path
             
         except Exception as fallback_error:
-            logging.error(f"All noise reduction methods failed: {fallback_error}")
-            # Last resort: basic ffmpeg
+            logging.error(f"All methods failed: {fallback_error}")
+            # Last resort
             simple_cmd = [
                 'ffmpeg', '-y', '-i', audio_path,
                 '-af', 'highpass=f=100,lowpass=f=8000,afftdn=nf=-25,loudnorm=I=-14:TP=-1.0:LRA=7',
