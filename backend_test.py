@@ -31,8 +31,8 @@ class VoicepodTester:
         
         # Create a simple test audio with speech using espeak and ffmpeg
         try:
-            # Generate speech with espeak
-            speech_text = "Hello everyone! This is an amazing test of our audio processing system. Wow, this is incredible technology!"
+            # Generate speech with espeak - more emotional content for better peak detection
+            speech_text = "Hello everyone! This is absolutely amazing! Wow, this technology is incredible! I can't believe how fantastic this sounds!"
             
             # Use espeak to generate speech, then convert to proper format
             subprocess.run([
