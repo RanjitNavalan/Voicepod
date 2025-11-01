@@ -177,7 +177,7 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         torchaudio.save(vocals_wav, vocals.cpu(), model.samplerate)
         
         # Apply noise reduction on vocals for extra clarity
-        logging.info("Applying AGGRESSIVE noise reduction for clean vocals...")
+        logging.info("Applying ULTRA-AGGRESSIVE noise reduction for recordings...")
         try:
             import noisereduce as nr
             import librosa
@@ -185,32 +185,44 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
             
             audio_data, sample_rate = librosa.load(vocals_wav, sr=None, mono=False)
             
-            # AGGRESSIVE noise reduction for recordings with background noise
-            # Two-pass approach for better results
-            # First pass: Heavy stationary noise removal
+            # ULTRA-AGGRESSIVE three-pass noise reduction for clean recordings
+            logging.info("Pass 1: Heavy stationary noise removal (85%)...")
+            # First pass: Very heavy stationary noise removal
             reduced_noise_pass1 = nr.reduce_noise(
                 y=audio_data,
                 sr=sample_rate,
                 stationary=True,
-                prop_decrease=0.8,  # 80% reduction - very aggressive
+                prop_decrease=0.85,  # 85% reduction - ultra aggressive
+                freq_mask_smooth_hz=1000,
+                time_mask_smooth_ms=150
+            )
+            
+            logging.info("Pass 2: Non-stationary noise removal (70%)...")
+            # Second pass: Non-stationary noise (background chatter, room noise)
+            reduced_noise_pass2 = nr.reduce_noise(
+                y=reduced_noise_pass1,
+                sr=sample_rate,
+                stationary=False,
+                prop_decrease=0.7,  # 70% additional reduction
                 freq_mask_smooth_hz=800,
                 time_mask_smooth_ms=100
             )
             
-            # Second pass: Non-stationary noise (for recordings)
-            reduced_noise_pass2 = nr.reduce_noise(
-                y=reduced_noise_pass1,
+            logging.info("Pass 3: Final polish (50%)...")
+            # Third pass: Final polish
+            reduced_noise_pass3 = nr.reduce_noise(
+                y=reduced_noise_pass2,
                 sr=sample_rate,
-                stationary=False,  # Remove non-stationary noise (background chatter, etc.)
-                prop_decrease=0.6,  # 60% additional reduction
+                stationary=True,
+                prop_decrease=0.5,  # 50% final pass
                 freq_mask_smooth_hz=500,
                 time_mask_smooth_ms=50
             )
             
             enhanced_wav = vocals_wav.replace('_vocals.wav', '_enhanced.wav')
-            sf.write(enhanced_wav, reduced_noise_pass2.T if len(reduced_noise_pass2.shape) > 1 else reduced_noise_pass2, sample_rate)
+            sf.write(enhanced_wav, reduced_noise_pass3.T if len(reduced_noise_pass3.shape) > 1 else reduced_noise_pass3, sample_rate)
             final_input = enhanced_wav
-            logging.info("Two-pass noise reduction completed successfully")
+            logging.info("Three-pass ultra-aggressive noise reduction completed successfully")
         except Exception as nr_error:
             logging.warning(f"Light noise reduction failed: {nr_error}, using Demucs vocals directly")
             final_input = vocals_wav
