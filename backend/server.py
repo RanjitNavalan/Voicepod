@@ -191,19 +191,30 @@ async def cleanvoice_cleanup(audio_path: str, config: Dict) -> str:
         raise Exception("Cleanvoice timeout")
         
     except Exception as e:
-        logging.warning(f"Cleanvoice failed: {e}. Falling back to basic processing.")
-        # Fallback: Just convert to MP3 with light normalization
+        logging.warning(f"Cleanvoice failed: {e}. Falling back to local audio processing.")
+        # Fallback: Local audio processing with ffmpeg
         cleaned_path = audio_path.replace(Path(audio_path).suffix, '_cleaned.mp3')
+        
+        # Advanced audio cleanup using ffmpeg filters
         fallback_cmd = [
             'ffmpeg', '-y', '-i', audio_path,
-            '-af', 'volume=1.5',  # Slight boost instead of aggressive normalization
+            '-af', 
+            # Noise reduction, high-pass filter, silence removal, normalization
+            'highpass=f=80,'  # Remove low-frequency rumble
+            'lowpass=f=12000,'  # Remove high-frequency noise
+            'afftdn=nf=-20,'  # FFT-based noise reduction
+            'silenceremove=start_periods=1:start_duration=0.1:start_threshold=-50dB:'
+            'stop_periods=-1:stop_duration=0.3:stop_threshold=-50dB,'  # Remove silence
+            'loudnorm=I=-14:TP=-1.0:LRA=7',  # Normalize volume
             '-c:a', 'libmp3lame', '-b:a', '192k',
             cleaned_path
         ]
         result = subprocess.run(fallback_cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            # If that fails, just copy
-            shutil.copy(audio_path, cleaned_path)
+            logging.error(f"Fallback processing failed: {result.stderr}")
+            # Last resort: simple conversion
+            simple_cmd = ['ffmpeg', '-y', '-i', audio_path, '-c:a', 'libmp3lame', '-b:a', '192k', cleaned_path]
+            subprocess.run(simple_cmd, check=True, capture_output=True)
         return cleaned_path
 
 async def transcribe_and_analyze(audio_path: str) -> Dict:
