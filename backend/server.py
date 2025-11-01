@@ -584,15 +584,8 @@ async def process_audio_pipeline(job_id: str, audio_path: str, preset_name: str,
             "current_step": "Error occurred"
         })
         logging.error(f"Processing failed for {job_id}: {e}")
-                "preset": preset_name,
-                "emotion_peaks": len(analysis['emotion_peaks'])
-            }
-        })
-        
-        # Cleanup temp files
-        for temp_file in [audio_path, cleaned_path, current_audio, merged_path]:
-            if os.path.exists(temp_file) and temp_file != str(final_destination):
-                os.remove(temp_file)
+
+# ==================== API ROUTES ====================
         
     except Exception as e:
         job_store[job_id].update({
